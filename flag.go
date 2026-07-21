@@ -2,7 +2,7 @@ package avsb
 
 // Flag[T] is the typed result of a flag evaluation.
 //
-// The zero value is a safe "flag not found" result — IsEnabled() returns
+// The zero value is a safe "flag not found" result: IsEnabled() returns
 // false, Exists() returns false, and Value() returns the default supplied
 // to the Get*Flag call.
 type Flag[T any] struct {

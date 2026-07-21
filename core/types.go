@@ -109,7 +109,7 @@ type Holdout struct {
 	DefaultVariationByFlag map[string]string `json:"defaultVariationByFlag"`
 }
 
-// Bandit is §2.10 — top-level bandit registry.
+// Bandit is §2.10, the top-level bandit registry.
 type Bandit struct {
 	ID     string       `json:"id"`
 	Key    string       `json:"key"`
@@ -131,7 +131,7 @@ type BanditAction struct {
 	ContextAttributes map[string]interface{} `json:"contextAttributes,omitempty"`
 }
 
-// BigSegmentRef is §2.9 — references to externally-stored segment membership.
+// BigSegmentRef is §2.9, a reference to externally-stored segment membership.
 type BigSegmentRef struct {
 	SegmentKey  string `json:"segmentKey"`
 	ContextKind string `json:"contextKind"`

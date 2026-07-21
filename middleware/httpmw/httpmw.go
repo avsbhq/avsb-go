@@ -23,7 +23,7 @@ type contextKey struct{}
 // Middleware wraps an http.Handler, extracting the eval context from the
 // request and making it available to downstream handlers via r.Context().
 //
-// The middleware itself does not evaluate any flags — it only injects the
+// The middleware itself does not evaluate any flags; it only injects the
 // EvalContext so handlers can call server.GetBoolFlag(r.Context(), ...) with
 // a pre-built context.
 func Middleware(server *avsb.Server, contextFn func(*http.Request) avsb.EvalContext) func(http.Handler) http.Handler {

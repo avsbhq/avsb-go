@@ -22,7 +22,7 @@
 //
 // The SDK is split into two layers:
 //
-//   - The top-level avsb package exposes the [Server] type — the public API
+//   - The top-level avsb package exposes the [Server] type, the public API
 //     callers interact with.
 //   - The core sub-package contains pure evaluation logic (hash, audience,
 //     evaluate, holdouts, bandits) that mirrors the canonical TypeScript

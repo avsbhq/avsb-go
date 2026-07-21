@@ -78,7 +78,7 @@ server, err := avsb.NewServer(avsb.ServerOptions{
 Every evaluation method accepts an `EvalContext` via `WithContext`. Build contexts with the provided factory functions:
 
 ```go
-// User context — most common
+// User context (most common)
 evalCtx := avsb.UserContext("u_123", map[string]any{
     "plan":       "pro",
     "beta_tester": true,
@@ -91,7 +91,7 @@ orgCtx := avsb.OrgContext("acme-corp", map[string]any{"tier": "enterprise"})
 devCtx := avsb.SingleContext("device", "d_abc", map[string]any{"os": "linux"})
 ```
 
-There is no persistent identity on the `Server` struct — each request constructs its own `EvalContext` and passes it via `WithContext`. This is idiomatic Go: no global state, safe for concurrent use across goroutines.
+There is no persistent identity on the `Server` struct. Each request constructs its own `EvalContext` and passes it via `WithContext`, which is idiomatic Go: no global state, safe for concurrent use across goroutines.
 
 ---
 
@@ -128,15 +128,15 @@ A `defaultValue` is required on every call. It is returned when the flag is not 
 ```go
 flag := server.GetBoolFlag(ctx, "checkout-v2", false, avsb.WithContext(evalCtx))
 
-flag.Value()        // T — the evaluated value
-flag.VariationKey() // string — matched variation key, empty when none
-flag.Source()       // string — "rule" | "holdout" | "default" | "not_found" | ...
-flag.RuleID()       // string — matched rule id, empty when none
-flag.RuleType()     // string — "ab_test" | "targeted_delivery" | "holdout" | "bandit"
-flag.Reasons()      // []string — populated when WithReasons(true) is set
-flag.FlagKey()      // string — the key this flag was evaluated for
-flag.IsEnabled()    // bool — source=="rule" && value is truthy
-flag.Exists()       // bool — source != "not_found"
+flag.Value()        // T: the evaluated value
+flag.VariationKey() // string: matched variation key, empty when none
+flag.Source()       // string: "rule" | "holdout" | "default" | "not_found" | ...
+flag.RuleID()       // string: matched rule id, empty when none
+flag.RuleType()     // string: "ab_test" | "targeted_delivery" | "holdout" | "bandit"
+flag.Reasons()      // []string: populated when WithReasons(true) is set
+flag.FlagKey()      // string: the key this flag was evaluated for
+flag.IsEnabled()    // bool: source=="rule" && value is truthy
+flag.Exists()       // bool: source != "not_found"
 ```
 
 ### Per-call options
@@ -194,7 +194,7 @@ server, err := avsb.NewServer(avsb.ServerOptions{
 })
 ```
 
-`NewServer` returns `(*Server, error)`. `OnReady` returns `error`. Both use standard Go error values — no custom error types. When `OnReady` fails, the server is still usable and returns default values; the background polling loop continues to retry.
+`NewServer` returns `(*Server, error)`. `OnReady` returns `error`. Both use standard Go error values, not custom error types. When `OnReady` fails, the server is still usable and returns default values; the background polling loop continues to retry.
 
 `GetBoolFlag` (and all other `Get*Flag` methods) never return an error. Evaluation failures produce a `Flag[T]` with `Source() == "not_found"` and `Value()` equal to the supplied default.
 
@@ -259,7 +259,7 @@ server, _ := avsb.NewServer(avsb.ServerOptions{SDKKey: os.Getenv("AVSB_SDK_KEY")
 defer server.Close()
 ```
 
-`Close` stops the background polling goroutine and the SSE streaming connection (if active), then flushes any buffered decision log entries. Call it before your process exits — typically via `defer` or a SIGTERM handler:
+`Close` stops the background polling goroutine and the SSE streaming connection (if active), then flushes any buffered decision log entries. Call it before your process exits, typically via `defer` or a SIGTERM handler:
 
 ```go
 quit := make(chan os.Signal, 1)
@@ -351,7 +351,7 @@ value := flag.Value()
 ```
 
 ```go
-// LaunchDarkly — multi-context
+// LaunchDarkly (multi-context)
 multi := ldcontext.NewMultiBuilder().
     Add(ldcontext.New("alice")).
     Add(ldcontext.NewWithKind("organization", "acme")).
@@ -359,7 +359,7 @@ multi := ldcontext.NewMultiBuilder().
 ```
 
 ```go
-// A vs B — multi-context
+// A vs B (multi-context)
 evalCtx := avsb.MultiContext(
     avsb.UserContext("alice", nil),
     avsb.OrgContext("acme", map[string]any{"tier": "enterprise"}),
@@ -368,7 +368,7 @@ evalCtx := avsb.MultiContext(
 
 Key differences:
 - `Get*Flag` returns a `Flag[T]` struct with full metadata. Access `.Value()` for the raw value.
-- `context.Context` is always the first argument — no separate `LDContext` wrapper.
+- `context.Context` is always the first argument; there's no separate `LDContext` wrapper.
 - `OnReady` is a synchronous blocking call (or use the timeout form). No callback/channel pattern.
 
 ### From Statsig Go SDK

@@ -1,6 +1,6 @@
 //go:build redis
 
-// Package sticky — Redis-backed StickyBucketService.
+// Package sticky: Redis-backed StickyBucketService.
 //
 // Build with: go build -tags redis ./...
 //

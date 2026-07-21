@@ -10,7 +10,7 @@ import (
 )
 
 // NewTestServer creates a Server with an inline datafile and reasons enabled.
-// Intended for unit tests — skips HTTP/SSE and does not validate the SDK key.
+// Intended for unit tests: skips HTTP/SSE and does not validate the SDK key.
 func NewTestServer(datafileJSON []byte) (*Server, error) {
 	s := &Server{
 		opts: ServerOptions{

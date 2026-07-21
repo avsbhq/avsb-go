@@ -310,7 +310,7 @@ type BanditEvaluationResult struct {
 
 // EvaluateBandit is the top-level entry point that selects a bandit action
 // for the given context and bandit key.
-// Returns nil when no model is available (cold start — no model loaded yet).
+// Returns nil when no model is available (cold start, no model loaded yet).
 func EvaluateBandit(
 	banditKey string,
 	config BanditConfig,

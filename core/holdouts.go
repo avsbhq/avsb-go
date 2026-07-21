@@ -14,12 +14,12 @@ type HoldoutEvaluation struct {
 // EvaluateHoldout checks whether the supplied context is held out from the
 // named flag by any active holdout in the datafile.
 //
-// Spec §8.2 — holdouts + mutual exclusion.
+// Spec §8.2: holdouts + mutual exclusion.
 //
 // The first holdout that participates in flagID and whose bucket lands inside
 // its traffic-allocation window classifies the context as held out. Bucketing
 // is murmurhash3(holdout.key + ":" + bucketingKey) % 10_000 so multiple flags
-// sharing a holdout get a consistent classification per context — this is the
+// sharing a holdout get a consistent classification per context, which is the
 // mutual-exclusion guarantee.
 func EvaluateHoldout(ctx EvalContext, flagID string, df *Datafile) HoldoutEvaluation {
 	if len(df.Holdouts) == 0 {

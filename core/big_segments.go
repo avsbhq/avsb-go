@@ -27,7 +27,7 @@ func NewInMemoryBigSegmentStore() *InMemoryBigSegmentStore {
 }
 
 // Add registers contextKey as a member of segmentKey. contextKind is accepted
-// for interface symmetry but is not stored separately — membership is keyed
+// for interface symmetry but is not stored separately: membership is keyed
 // only by segmentKey + contextKey.
 func (s *InMemoryBigSegmentStore) Add(segmentKey, _ string, contextKey string) {
 	s.mu.Lock()

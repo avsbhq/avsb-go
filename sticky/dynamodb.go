@@ -1,6 +1,6 @@
 //go:build dynamodb
 
-// Package sticky — DynamoDB-backed StickyBucketService.
+// Package sticky: DynamoDB-backed StickyBucketService.
 //
 // Build with: go build -tags dynamodb ./...
 //

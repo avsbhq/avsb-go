@@ -1,6 +1,6 @@
 //go:build postgres
 
-// Package sticky — PostgreSQL-backed StickyBucketService.
+// Package sticky: PostgreSQL-backed StickyBucketService.
 //
 // Build with: go build -tags postgres ./...
 //

@@ -20,7 +20,7 @@ const defaultStreamingBaseURL = "https://stream.avsb.cloud/v2/"
 // Server is the primary A vs B SDK entry point. It holds a copy of the
 // current datafile and evaluates flag decisions against it.
 //
-// Create one Server per application and share it across goroutines — it is
+// Create one Server per application and share it across goroutines: it is
 // safe for concurrent use after OnReady returns.
 type Server struct {
 	opts    ServerOptions
