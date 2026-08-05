@@ -1,6 +1,7 @@
 package sticky_test
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/avsbhq/avsb-go/sticky"
 )
 
-func TestInMemoryService_SaveAndGet(t *testing.T) {
+func TestInMemoryService_SaveAndLookup(t *testing.T) {
 	svc := sticky.NewInMemoryService()
 
 	assignment := core.StickyAssignment{
@@ -18,62 +19,107 @@ func TestInMemoryService_SaveAndGet(t *testing.T) {
 		AssignedAt:  time.Now().UnixMilli(),
 	}
 
-	svc.SaveAssignment("user_1", "checkout-v2", "rule_ab_1", assignment)
-	got := svc.GetAssignment("user_1", "checkout-v2", "rule_ab_1")
+	svc.Save("user_1", "checkout-v2", assignment)
+	got := svc.Lookup("user_1", "checkout-v2")
 
 	if got == nil {
-		t.Fatal("expected non-nil assignment after save")
+		t.Fatal("expected the stored assignment back after a save")
 	}
 	if got.VariationID != "var_treatment" {
 		t.Errorf("variationID: want var_treatment, got %q", got.VariationID)
 	}
+	if got.RuleID != "rule_ab_1" || got.RuleType != "ab_test" {
+		t.Errorf("the rule the assignment came from must survive: got %q/%q", got.RuleID, got.RuleType)
+	}
 }
 
-func TestInMemoryService_MissingKey_ReturnsNil(t *testing.T) {
+func TestInMemoryService_MissReturnsNil(t *testing.T) {
 	svc := sticky.NewInMemoryService()
-	got := svc.GetAssignment("unknown_user", "some-flag", "some-rule")
-	if got != nil {
-		t.Errorf("expected nil for missing assignment, got %+v", got)
+	if got := svc.Lookup("unknown_user", "some-flag"); got != nil {
+		t.Errorf("a miss is nil, not a zero assignment; got %+v", got)
 	}
 }
 
 func TestInMemoryService_OverwriteAssignment(t *testing.T) {
 	svc := sticky.NewInMemoryService()
 
-	first := core.StickyAssignment{VariationID: "var_control"}
-	second := core.StickyAssignment{VariationID: "var_treatment"}
+	svc.Save("u1", "flag-x", core.StickyAssignment{VariationID: "var_control"})
+	svc.Save("u1", "flag-x", core.StickyAssignment{VariationID: "var_treatment"})
 
-	svc.SaveAssignment("u1", "flag-x", "rule-1", first)
-	svc.SaveAssignment("u1", "flag-x", "rule-1", second)
-
-	got := svc.GetAssignment("u1", "flag-x", "rule-1")
+	got := svc.Lookup("u1", "flag-x")
 	if got == nil {
-		t.Fatal("expected non-nil")
+		t.Fatal("expected an assignment")
 	}
 	if got.VariationID != "var_treatment" {
-		t.Errorf("expected overwrite: want var_treatment, got %q", got.VariationID)
+		t.Errorf("the newer save wins: want var_treatment, got %q", got.VariationID)
 	}
 	if svc.Len() != 1 {
-		t.Errorf("expected 1 stored assignment, got %d", svc.Len())
+		t.Errorf("one identity and one flag is one record, got %d", svc.Len())
 	}
 }
 
-func TestInMemoryService_DifferentKeys_StoredSeparately(t *testing.T) {
+// TestInMemoryService_KeyedByIdentityAndFlag covers the composite key. The rule
+// id is deliberately NOT part of it: a lookup happens before the evaluator has
+// picked a rule, so keying on it would miss every time.
+func TestInMemoryService_KeyedByIdentityAndFlag(t *testing.T) {
 	svc := sticky.NewInMemoryService()
 
-	a1 := core.StickyAssignment{VariationID: "var_a"}
-	a2 := core.StickyAssignment{VariationID: "var_b"}
+	svc.Save("u1", "flag-a", core.StickyAssignment{VariationID: "var_a"})
+	svc.Save("u2", "flag-a", core.StickyAssignment{VariationID: "var_b"})
+	svc.Save("u1", "flag-b", core.StickyAssignment{VariationID: "var_c"})
 
-	svc.SaveAssignment("u1", "flag-a", "rule-1", a1)
-	svc.SaveAssignment("u2", "flag-a", "rule-1", a2)
-
-	got1 := svc.GetAssignment("u1", "flag-a", "rule-1")
-	got2 := svc.GetAssignment("u2", "flag-a", "rule-1")
-
-	if got1 == nil || got1.VariationID != "var_a" {
-		t.Errorf("u1: want var_a, got %v", got1)
+	cases := []struct {
+		bucketingID string
+		flagKey     string
+		want        string
+	}{
+		{bucketingID: "u1", flagKey: "flag-a", want: "var_a"},
+		{bucketingID: "u2", flagKey: "flag-a", want: "var_b"},
+		{bucketingID: "u1", flagKey: "flag-b", want: "var_c"},
 	}
-	if got2 == nil || got2.VariationID != "var_b" {
-		t.Errorf("u2: want var_b, got %v", got2)
+	for _, tc := range cases {
+		got := svc.Lookup(tc.bucketingID, tc.flagKey)
+		if got == nil || got.VariationID != tc.want {
+			t.Errorf("%s/%s: want %q, got %+v", tc.bucketingID, tc.flagKey, tc.want, got)
+		}
 	}
+	if svc.Len() != 3 {
+		t.Errorf("want three distinct records, got %d", svc.Len())
+	}
+}
+
+// TestInMemoryService_LookupReturnsACopy stops a caller mutating the store
+// through the pointer it was handed.
+func TestInMemoryService_LookupReturnsACopy(t *testing.T) {
+	svc := sticky.NewInMemoryService()
+	svc.Save("u1", "flag-a", core.StickyAssignment{VariationID: "var_a"})
+
+	first := svc.Lookup("u1", "flag-a")
+	first.VariationID = "mutated"
+
+	second := svc.Lookup("u1", "flag-a")
+	if second.VariationID != "var_a" {
+		t.Errorf("the store must be immutable through a returned pointer, got %q", second.VariationID)
+	}
+}
+
+// TestInMemoryService_IsSafeForConcurrentUse covers the promise a shared Server
+// makes: evaluation runs on every request goroutine, and each one may look up
+// and save.
+func TestInMemoryService_IsSafeForConcurrentUse(t *testing.T) {
+	svc := sticky.NewInMemoryService()
+
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			id := string(rune('a' + i%26))
+			for j := 0; j < 50; j++ {
+				svc.Save(id, "flag-a", core.StickyAssignment{VariationID: "var_a"})
+				_ = svc.Lookup(id, "flag-a")
+			}
+		}(i)
+	}
+	wg.Wait()
 }

@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -22,25 +23,29 @@ import (
 
 // DynamoDBService is a DynamoDB-backed StickyBucketService. Each assignment is
 // stored as an item in a single table with composite key (pk=bucketingID,
-// sk=flagKey:ruleID).
+// sk=flagKey).
 type DynamoDBService struct {
 	client    *dynamodb.Client
 	tableName string
+	logger    *slog.Logger
 }
 
-// NewDynamoDBService creates a DynamoDBService.
-func NewDynamoDBService(client *dynamodb.Client, tableName string) *DynamoDBService {
-	return &DynamoDBService{client: client, tableName: tableName}
+// NewDynamoDBService creates a DynamoDBService. Pass a logger to see write
+// failures; nil drops them.
+func NewDynamoDBService(client *dynamodb.Client, tableName string, logger *slog.Logger) *DynamoDBService {
+	return &DynamoDBService{client: client, tableName: tableName, logger: logger}
 }
 
-// GetAssignment implements core.StickyBucketService.
-func (s *DynamoDBService) GetAssignment(bucketingID, flagKey, ruleID string) *core.StickyAssignment {
+// Lookup implements avsb.StickyBucketService. Blocking, for the reason given on
+// the Redis service: a background-refresh cache would serve the first request a
+// miss and the second the stored value, which is not sticky.
+func (s *DynamoDBService) Lookup(bucketingID, flagKey string) *core.StickyAssignment {
 	ctx := context.Background()
 	result, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(s.tableName),
 		Key: map[string]types.AttributeValue{
 			"pk": &types.AttributeValueMemberS{Value: bucketingID},
-			"sk": &types.AttributeValueMemberS{Value: flagKey + ":" + ruleID},
+			"sk": &types.AttributeValueMemberS{Value: flagKey},
 		},
 	})
 	if err != nil || result.Item == nil {
@@ -61,8 +66,8 @@ func (s *DynamoDBService) GetAssignment(bucketingID, flagKey, ruleID string) *co
 	return &a
 }
 
-// SaveAssignment implements core.StickyBucketService.
-func (s *DynamoDBService) SaveAssignment(bucketingID, flagKey, ruleID string, assignment core.StickyAssignment) {
+// Save implements avsb.StickyBucketService. Fire and forget.
+func (s *DynamoDBService) Save(bucketingID, flagKey string, assignment core.StickyAssignment) {
 	ctx := context.Background()
 	raw, err := json.Marshal(assignment)
 	if err != nil {
@@ -72,11 +77,20 @@ func (s *DynamoDBService) SaveAssignment(bucketingID, flagKey, ruleID string, as
 		TableName: aws.String(s.tableName),
 		Item: map[string]types.AttributeValue{
 			"pk":         &types.AttributeValueMemberS{Value: bucketingID},
-			"sk":         &types.AttributeValueMemberS{Value: flagKey + ":" + ruleID},
+			"sk":         &types.AttributeValueMemberS{Value: flagKey},
 			"assignment": &types.AttributeValueMemberS{Value: string(raw)},
 		},
 	})
 	if err != nil {
-		_ = fmt.Sprintf("avsb/sticky: dynamodb save failed: %v", err)
+		s.logf("avsb/sticky: dynamodb save failed for %s/%s: %v", bucketingID, flagKey, err)
 	}
+}
+
+// logf reports a write failure through the configured logger, or drops it when
+// there is none.
+func (s *DynamoDBService) logf(format string, args ...any) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Warn(fmt.Sprintf(format, args...))
 }

@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// reservedContextKeys mirrors the TypeScript set of keys excluded from
-// attribute lookup so we never collapse identity fields into targeting
-// attributes.
+// reservedContextKeys are the identity fields excluded from attribute lookup,
+// so a context's own kind/key/name never collapse into targeting attributes.
 var reservedContextKeys = map[string]struct{}{
 	"kind":  {},
 	"key":   {},
@@ -15,16 +14,19 @@ var reservedContextKeys = map[string]struct{}{
 	"_meta": {},
 }
 
-// SingleContext is the parsed form of one kind:key:attrs envelope.
+// SingleContext is the parsed form of one kind/key/attributes envelope.
 type SingleContext struct {
-	Kind       string
-	Key        string
-	Name       string
+	// Kind is the context kind, e.g. "user" or "organization".
+	Kind string
+	// Key is the identity this kind buckets on.
+	Key string
+	// Name is an optional display name.
+	Name string
+	// Attributes is every non-reserved field, still as raw JSON.
 	Attributes map[string]json.RawMessage
 }
 
-// IsMultiContext reports whether ctx is a multi-context wrapper
-// (i.e. kind == "multi").
+// IsMultiContext reports whether ctx is a multi-context wrapper (kind "multi").
 func IsMultiContext(ctx EvalContext) bool {
 	raw, ok := ctx["kind"]
 	if !ok {
@@ -37,8 +39,8 @@ func IsMultiContext(ctx EvalContext) bool {
 	return kind == "multi"
 }
 
-// ParseSingle reads a SingleContext from raw JSON bytes.
-// Returns nil when the bytes do not decode into a SingleContext shape.
+// ParseSingle reads a SingleContext from raw JSON bytes. Returns nil when the
+// bytes do not decode into a single-context shape.
 func ParseSingle(raw json.RawMessage) *SingleContext {
 	if len(raw) == 0 {
 		return nil
@@ -76,8 +78,8 @@ func (ctx EvalContext) AsSingle() *SingleContext {
 }
 
 // ContextByKind returns the sub-context for the supplied kind. For a
-// single-context, returns the receiver when kinds match. For a multi-context,
-// dereferences the sibling sub-context.
+// single-context it returns the receiver when the kinds match; for a
+// multi-context it dereferences the sibling sub-context.
 func ContextByKind(ctx EvalContext, kind string) *SingleContext {
 	if IsMultiContext(ctx) {
 		raw, ok := ctx[kind]
@@ -97,8 +99,10 @@ func ContextByKind(ctx EvalContext, kind string) *SingleContext {
 	return single
 }
 
-// BucketingKey returns the canonical bucketing identifier for the given kind,
-// defaulting to "user". Returns the empty string when no key is available.
+// BucketingKey returns the bucketing identifier for the given kind, defaulting
+// to "user". Returns the empty string when no key is available, which buckets
+// every such context together: that is deterministic, and the SDK layer warns
+// about it once per process.
 func BucketingKey(ctx EvalContext, kind string) string {
 	if kind == "" {
 		kind = "user"
@@ -110,19 +114,16 @@ func BucketingKey(ctx EvalContext, kind string) string {
 	return sub.Key
 }
 
-// PrimaryContext returns the primary single-context for an EvalContext.
-// For a multi-context the 'user' sub-context is preferred; otherwise the
-// first non-meta entry is returned. For a single-context it is returned
-// directly.
+// PrimaryContext returns the primary single-context. For a multi-context the
+// "user" sub-context is preferred, otherwise the first non-meta entry. For a
+// single-context it is returned directly.
 func PrimaryContext(ctx EvalContext) *SingleContext {
 	if !IsMultiContext(ctx) {
 		return ctx.AsSingle()
 	}
-	// prefer user
 	if sub := ContextByKind(ctx, "user"); sub != nil {
 		return sub
 	}
-	// fall back to first non-meta kind
 	for k, v := range ctx {
 		if k == "kind" {
 			continue
@@ -136,10 +137,10 @@ func PrimaryContext(ctx EvalContext) *SingleContext {
 
 // ResolveDottedAttribute resolves a dotted path against an EvalContext.
 //
-//   - "user.key"           → key of the 'user' sub-context
-//   - "organization.tier"  → tier attribute on the 'organization' sub-context
-//   - "userId" (no dot)    → legacy fallback: primary context's key
-//   - any other bare path  → attribute from the primary context's bag
+//   - "user.key"           key of the "user" sub-context
+//   - "organization.tier"  tier attribute on the "organization" sub-context
+//   - "userId" (no dot)    legacy fallback: the primary context's key
+//   - any other bare path  attribute from the primary context's bag
 //
 // Returns nil when the path cannot be resolved.
 func ResolveDottedAttribute(ctx EvalContext, dottedPath string) json.RawMessage {
@@ -156,19 +157,19 @@ func ResolveDottedAttribute(ctx EvalContext, dottedPath string) json.RawMessage 
 		}
 		return readSubAttribute(sub, attr)
 	}
-	// Non-dotted legacy path.
 	primary := PrimaryContext(ctx)
 	if primary == nil {
 		return nil
 	}
 	if dottedPath == "userId" {
-		return jsonString(primary.Key)
+		return rawJSONString(primary.Key)
 	}
 	return readSubAttribute(primary, dottedPath)
 }
 
-// ResolveAttribute is the original kinded lookup used by the audience
-// evaluator. It mirrors the TypeScript resolveAttribute behaviour.
+// ResolveAttribute is the kinded lookup the audience evaluator uses. When
+// contextKind is empty it falls back to the primary context, which also
+// exposes the primary key as "userId" for legacy audiences.
 func ResolveAttribute(ctx EvalContext, contextKind, attribute string) json.RawMessage {
 	if contextKind != "" {
 		sub := ContextByKind(ctx, contextKind)
@@ -187,17 +188,17 @@ func ResolveAttribute(ctx EvalContext, contextKind, attribute string) json.RawMe
 		return nil
 	}
 	if attribute == "userId" {
-		return jsonString(primary.Key)
+		return rawJSONString(primary.Key)
 	}
 	return readSubAttribute(primary, attribute)
 }
 
 func readSubAttribute(sub *SingleContext, attribute string) json.RawMessage {
 	if attribute == "key" {
-		return jsonString(sub.Key)
+		return rawJSONString(sub.Key)
 	}
 	if attribute == "name" {
-		return jsonString(sub.Name)
+		return rawJSONString(sub.Name)
 	}
 	if _, reserved := reservedContextKeys[attribute]; reserved {
 		return nil
@@ -209,16 +210,15 @@ func readSubAttribute(sub *SingleContext, attribute string) json.RawMessage {
 	return v
 }
 
-// LegacyAttribute returns the resolved hash value for the given hash
-// attribute path (e.g. "user.key", "userId"). Returned as a string
-// for direct use in MurmurHash3 calls.
+// LegacyAttribute returns the resolved hash value for a hash-attribute path
+// (for example "user.key" or "userId"), as a string ready for MurmurHash3.
 func LegacyAttribute(ctx EvalContext, attribute string) string {
 	if attribute == "" {
 		attribute = "userId"
 	}
 	raw := ResolveDottedAttribute(ctx, attribute)
 	if raw == nil {
-		// Flat bag fallback — legacy single-context.
+		// Flat-bag fallback for a legacy single-context.
 		single := ctx.AsSingle()
 		if single == nil {
 			return ""
@@ -231,13 +231,14 @@ func LegacyAttribute(ctx EvalContext, attribute string) string {
 	return RawToString(raw)
 }
 
-func jsonString(s string) json.RawMessage {
+// rawJSONString wraps a Go string as a JSON string literal.
+func rawJSONString(s string) json.RawMessage {
 	b, _ := json.Marshal(s)
 	return b
 }
 
-// RawToString converts a json.RawMessage to its string representation.
-// JSON string literals are unwrapped; numbers are returned as-is.
+// RawToString converts raw JSON to its string form. JSON string literals are
+// unwrapped; every other shape is returned as its JSON text.
 func RawToString(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
@@ -251,14 +252,42 @@ func RawToString(raw json.RawMessage) string {
 	return string(raw)
 }
 
-// ContextSummary returns a compact representation of the context for logging.
-func ContextSummary(ctx EvalContext) string {
+// ContextRefs summarises a context as kind/key pairs for the decision log.
+// Attributes are deliberately excluded because they may carry personal data.
+//
+// This replaced a single "user:u_1" string so the Go decision log carries the
+// same shape as the Python, .NET, and agent logs: a list a consumer can filter
+// on rather than a string it has to parse.
+func ContextRefs(ctx EvalContext) []ContextRef {
 	if IsMultiContext(ctx) {
-		return "multi"
+		out := make([]ContextRef, 0, len(ctx))
+		for kind, raw := range ctx {
+			if kind == "kind" {
+				continue
+			}
+			sub := ParseSingle(raw)
+			if sub == nil {
+				continue
+			}
+			out = append(out, ContextRef{Kind: sub.Kind, Key: sub.Key})
+		}
+		sortContextRefs(out)
+		return out
 	}
 	single := ctx.AsSingle()
 	if single == nil {
-		return "unknown"
+		return []ContextRef{}
 	}
-	return single.Kind + ":" + single.Key
+	return []ContextRef{{Kind: single.Kind, Key: single.Key}}
+}
+
+// sortContextRefs orders refs by kind so a multi-context log entry is stable
+// across runs. Go map iteration order is randomised, and a decision log that
+// reorders itself between two identical evaluations is unreadable in a diff.
+func sortContextRefs(refs []ContextRef) {
+	for i := 1; i < len(refs); i++ {
+		for j := i; j > 0 && refs[j].Kind < refs[j-1].Kind; j-- {
+			refs[j], refs[j-1] = refs[j-1], refs[j]
+		}
+	}
 }

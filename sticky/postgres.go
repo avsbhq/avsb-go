@@ -13,10 +13,9 @@
 //	CREATE TABLE IF NOT EXISTS avsb_sticky_assignments (
 //	    bucketing_id TEXT NOT NULL,
 //	    flag_key     TEXT NOT NULL,
-//	    rule_id      TEXT NOT NULL,
 //	    assignment   JSONB NOT NULL,
 //	    assigned_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-//	    PRIMARY KEY (bucketing_id, flag_key, rule_id)
+//	    PRIMARY KEY (bucketing_id, flag_key)
 //	);
 package sticky
 
@@ -24,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"github.com/avsbhq/avsb-go/core"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -31,21 +31,24 @@ import (
 
 // PostgresService is a PostgreSQL-backed StickyBucketService.
 type PostgresService struct {
-	pool *pgxpool.Pool
+	pool   *pgxpool.Pool
+	logger *slog.Logger
 }
 
-// NewPostgresService creates a PostgresService using the supplied connection pool.
-func NewPostgresService(pool *pgxpool.Pool) *PostgresService {
-	return &PostgresService{pool: pool}
+// NewPostgresService creates a PostgresService on the supplied pool. Pass a
+// logger to see write failures; nil drops them.
+func NewPostgresService(pool *pgxpool.Pool, logger *slog.Logger) *PostgresService {
+	return &PostgresService{pool: pool, logger: logger}
 }
 
-// GetAssignment implements core.StickyBucketService.
-func (s *PostgresService) GetAssignment(bucketingID, flagKey, ruleID string) *core.StickyAssignment {
+// Lookup implements avsb.StickyBucketService. Blocking, for the reason given on
+// the Redis service.
+func (s *PostgresService) Lookup(bucketingID, flagKey string) *core.StickyAssignment {
 	ctx := context.Background()
 	var raw []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT assignment FROM avsb_sticky_assignments WHERE bucketing_id=$1 AND flag_key=$2 AND rule_id=$3`,
-		bucketingID, flagKey, ruleID,
+		`SELECT assignment FROM avsb_sticky_assignments WHERE bucketing_id=$1 AND flag_key=$2`,
+		bucketingID, flagKey,
 	).Scan(&raw)
 	if err != nil {
 		return nil
@@ -57,21 +60,30 @@ func (s *PostgresService) GetAssignment(bucketingID, flagKey, ruleID string) *co
 	return &a
 }
 
-// SaveAssignment implements core.StickyBucketService.
-func (s *PostgresService) SaveAssignment(bucketingID, flagKey, ruleID string, assignment core.StickyAssignment) {
+// Save implements avsb.StickyBucketService. Fire and forget.
+func (s *PostgresService) Save(bucketingID, flagKey string, assignment core.StickyAssignment) {
 	ctx := context.Background()
 	raw, err := json.Marshal(assignment)
 	if err != nil {
 		return
 	}
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO avsb_sticky_assignments (bucketing_id, flag_key, rule_id, assignment)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (bucketing_id, flag_key, rule_id)
+		`INSERT INTO avsb_sticky_assignments (bucketing_id, flag_key, assignment)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (bucketing_id, flag_key)
 		 DO UPDATE SET assignment = EXCLUDED.assignment, assigned_at = NOW()`,
-		bucketingID, flagKey, ruleID, raw,
+		bucketingID, flagKey, raw,
 	)
 	if err != nil {
-		_ = fmt.Sprintf("avsb/sticky: postgres save failed: %v", err)
+		s.logf("avsb/sticky: postgres save failed for %s/%s: %v", bucketingID, flagKey, err)
 	}
+}
+
+// logf reports a write failure through the configured logger, or drops it when
+// there is none.
+func (s *PostgresService) logf(format string, args ...any) {
+	if s.logger == nil {
+		return
+	}
+	s.logger.Warn(fmt.Sprintf(format, args...))
 }

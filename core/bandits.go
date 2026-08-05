@@ -6,24 +6,35 @@ import (
 	"strings"
 )
 
-// BanditModelStore is the interface that bandit model backends must satisfy.
+// Bandit evaluation: epsilon-greedy, Thompson sampling, UCB1.
+//
+// Port of packages/avsb-core/src/bandits.ts. Design invariants, do not regress:
+//
+//   - The algorithms are pure functions of (perAction, actions, hashBucket).
+//   - No real randomness. Every stochastic step is seeded from MurmurHash3, so
+//     one (banditKey, context) pair always produces the same decision. That is
+//     what makes concrete expected actions testable and lets an incident be
+//     replayed.
+//   - Ties break alphabetically on action id, also for determinism. It is why
+//     cold start serves the lowest action id rather than the first declared.
+
+// BanditModelStore is the interface bandit model backends satisfy.
 type BanditModelStore interface {
-	// GetModel returns the current model for the named bandit, or nil when
-	// no model has been loaded yet (cold start).
+	// GetModel returns the current model for the named bandit, or nil when no
+	// model has been loaded yet.
 	GetModel(banditKey string) *BanditModel
-	// UpdateModel persists or updates the model. Fire-and-forget; callers
-	// are free to batch or persist asynchronously.
+	// UpdateModel persists or updates the model. Fire and forget; callers may
+	// batch or persist asynchronously.
 	UpdateModel(banditKey string, model *BanditModel)
 }
 
-// InMemoryBanditModelStore is a thread-unsafe in-memory BanditModelStore
-// suitable for tests and single-goroutine usage.
+// InMemoryBanditModelStore is an in-memory BanditModelStore for tests and
+// single-goroutine usage. It is NOT safe for concurrent use.
 type InMemoryBanditModelStore struct {
 	models map[string]*BanditModel
 }
 
-// NewInMemoryBanditModelStore creates a new store optionally seeded with
-// initial models.
+// NewInMemoryBanditModelStore creates a store, optionally seeded with models.
 func NewInMemoryBanditModelStore(initial map[string]*BanditModel) *InMemoryBanditModelStore {
 	s := &InMemoryBanditModelStore{models: make(map[string]*BanditModel)}
 	for k, m := range initial {
@@ -32,7 +43,7 @@ func NewInMemoryBanditModelStore(initial map[string]*BanditModel) *InMemoryBandi
 	return s
 }
 
-// GetModel returns the current model or nil.
+// GetModel returns the current model, or nil.
 func (s *InMemoryBanditModelStore) GetModel(banditKey string) *BanditModel {
 	return s.models[banditKey]
 }
@@ -41,6 +52,33 @@ func (s *InMemoryBanditModelStore) GetModel(banditKey string) *BanditModel {
 func (s *InMemoryBanditModelStore) UpdateModel(banditKey string, model *BanditModel) {
 	s.models[banditKey] = model
 }
+
+// coldStartModelVersion is the version reported for the derived model the
+// evaluator falls back to when the caller supplied no store.
+const coldStartModelVersion = "cold-start"
+
+// coldStartBanditStore hands back a zero-observation model for any bandit key,
+// so the algorithms run their documented cold-start policies instead of the
+// rule being silently skipped. A bandit that has never been trained still has
+// to serve something, and "the lowest action id, deterministically" is an
+// answer every language agrees on.
+func coldStartBanditStore(config BanditConfig) BanditModelStore {
+	model := &BanditModel{
+		Version:   coldStartModelVersion,
+		Algorithm: config.Algorithm,
+		PerAction: map[string]BanditPerActionStats{},
+	}
+	return coldStartStore{model: model}
+}
+
+type coldStartStore struct {
+	model *BanditModel
+}
+
+func (s coldStartStore) GetModel(string) *BanditModel { return s.model }
+
+// UpdateModel is a no-op: the cold-start model is derived, not stored.
+func (s coldStartStore) UpdateModel(string, *BanditModel) {}
 
 const maxBucket = 10000
 const hashRange = float64(0x100000000) // 2^32
@@ -55,9 +93,9 @@ func sortedActions(actions []BanditAction) []BanditAction {
 	return cp
 }
 
-// statsFor returns the stats for the given actionId, defaulting to cold-start
-// (zero mean, zero samples, variance=1 so Thompson sampling has a defined
-// scale on unseen actions).
+// statsFor returns the stats for actionID, defaulting to cold start: zero mean,
+// zero samples, and variance 1 so Thompson sampling still has a defined scale
+// on an unseen action.
 func statsFor(perAction map[string]BanditPerActionStats, actionID string) BanditPerActionStats {
 	if s, ok := perAction[actionID]; ok {
 		return s
@@ -65,26 +103,24 @@ func statsFor(perAction map[string]BanditPerActionStats, actionID string) Bandit
 	return BanditPerActionStats{Mean: 0, Variance: 1, Samples: 0}
 }
 
-// uniformFromSeed derives a uniform-in-(0,1] sample from a deterministic seed.
-// Mirrors the TypeScript uniformFromSeed implementation.
+// uniformFromSeed derives a uniform sample in (0,1] from a deterministic seed.
+// The 1 in the numerator keeps it strictly above zero, because Box-Muller
+// takes log(u1) and log(0) is negative infinity.
 func uniformFromSeed(seed uint32, salt int) float64 {
-	// hashStr is the combined string feed into MurmurHash3.
-	hashStr := strings.Join([]string{uint32ToStr(seed), ":", intToStr(salt)}, "")
-	hashed := MurmurHash3(hashStr, 0)
-	// Add 1 so result is in (0,1] — Box-Muller requires u1 > 0 (log(0) is -∞).
+	hashed := MurmurHash3(uint32ToStr(seed)+":"+intToStr(salt), 0)
 	return (float64(hashed) + 1) / (hashRange + 1)
 }
 
-// SeededGaussian produces a single standard-normal sample deterministically
-// from seed. Uses the Box-Muller transform with two seeded uniform samples.
-// Exported so tests can assert the seeded-random pipeline directly.
+// SeededGaussian produces one standard-normal sample deterministically from
+// seed, via Box-Muller over two seeded uniforms. Exported so tests can assert
+// the seeded-random pipeline directly instead of inferring it from decisions.
 func SeededGaussian(seed uint32) float64 {
 	u1 := uniformFromSeed(seed, 1)
 	u2 := uniformFromSeed(seed, 2)
 	return math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2)
 }
 
-// intToStr converts an int to its string representation without fmt.
+// intToStr renders an int without pulling fmt into the hot path.
 func intToStr(n int) string {
 	if n == 0 {
 		return "0"
@@ -98,7 +134,6 @@ func intToStr(n int) string {
 		buf = append(buf, byte('0'+n%10))
 		n /= 10
 	}
-	// reverse
 	for i, j := 0, len(buf)-1; i < j; i, j = i+1, j-1 {
 		buf[i], buf[j] = buf[j], buf[i]
 	}
@@ -108,7 +143,7 @@ func intToStr(n int) string {
 	return string(buf)
 }
 
-// uint32ToStr converts a uint32 to its string representation.
+// uint32ToStr renders a uint32 without pulling fmt into the hot path.
 func uint32ToStr(n uint32) string {
 	if n == 0 {
 		return "0"
@@ -124,206 +159,33 @@ func uint32ToStr(n uint32) string {
 	return string(buf)
 }
 
-// EpsilonGreedyResult holds the result of an epsilon-greedy selection.
-type EpsilonGreedyResult struct {
-	Action            BanditAction
-	ActionProbability float64
-	ExploreFired      bool
-}
-
-// EpsilonGreedy selects an action using the epsilon-greedy algorithm.
-// hashBucket is the pre-computed MurmurHash3 bucket (0..9999).
-func EpsilonGreedy(
-	perAction map[string]BanditPerActionStats,
-	actions []BanditAction,
-	hashBucket uint32,
-	explorationRate *float64,
-) (EpsilonGreedyResult, error) {
-	if len(actions) == 0 {
-		return EpsilonGreedyResult{}, errEmptyActions("epsilonGreedy")
-	}
-
-	sorted := sortedActions(actions)
-	epsilon := 0.1
-	if explorationRate != nil {
-		epsilon = *explorationRate
-	}
-	n := len(sorted)
-	bucketFraction := float64(hashBucket) / maxBucket
-	exploreFired := bucketFraction < epsilon
-
-	if exploreFired {
-		idx := int(hashBucket) % n
-		action := sorted[idx]
-		return EpsilonGreedyResult{
-			Action:            action,
-			ActionProbability: epsilon / float64(n),
-			ExploreFired:      true,
-		}, nil
-	}
-
-	// Exploit branch — pick the highest mean, alphabetical tie-break on id.
-	var bestID string
-	bestMean := math.Inf(-1)
-	bestCount := 0
-	for _, action := range sorted {
-		stats := statsFor(perAction, action.ID)
-		if stats.Mean > bestMean {
-			bestMean = stats.Mean
-			bestID = action.ID
-			bestCount = 1
-		} else if stats.Mean == bestMean {
-			bestCount++
-		}
-	}
-
-	var bestAction BanditAction
-	for _, a := range sorted {
-		if a.ID == bestID {
-			bestAction = a
-			break
-		}
-	}
-
-	exploitMass := (1 - epsilon) / float64(bestCount)
-	return EpsilonGreedyResult{
-		Action:            bestAction,
-		ActionProbability: exploitMass + epsilon/float64(n),
-		ExploreFired:      false,
-	}, nil
-}
-
-// ThompsonSampleResult holds the result of a Thompson sampling selection.
-type ThompsonSampleResult struct {
-	Action            BanditAction
-	ActionProbability float64
-}
-
-// ThompsonSample selects an action using Thompson sampling with seeded
-// pseudo-randomness derived from hashBucket.
-func ThompsonSample(
-	perAction map[string]BanditPerActionStats,
-	actions []BanditAction,
-	hashBucket uint32,
-) (ThompsonSampleResult, error) {
-	if len(actions) == 0 {
-		return ThompsonSampleResult{}, errEmptyActions("thompsonSample")
-	}
-
-	sorted := sortedActions(actions)
-
-	bestID := sorted[0].ID
-	bestSample := math.Inf(-1)
-
-	for _, action := range sorted {
-		stats := statsFor(perAction, action.ID)
-		// Seed each action independently from the request bucket.
-		seedStr := uint32ToStr(hashBucket) + ":" + action.ID
-		seed := MurmurHash3(seedStr, 0)
-		z := SeededGaussian(seed)
-		samples := stats.Samples
-		if samples < 1 {
-			samples = 1
-		}
-		stddev := math.Sqrt(stats.Variance / float64(samples))
-		sample := stats.Mean + z*stddev
-		if sample > bestSample {
-			bestSample = sample
-			bestID = action.ID
-		}
-	}
-
-	var bestAction BanditAction
-	for _, a := range sorted {
-		if a.ID == bestID {
-			bestAction = a
-			break
-		}
-	}
-
-	return ThompsonSampleResult{
-		Action: bestAction,
-		// 1/N placeholder — true posterior selection probability requires
-		// integration over the joint posterior (computed offline).
-		ActionProbability: 1.0 / float64(len(sorted)),
-	}, nil
-}
-
-// UCB1Result holds the result of a UCB1 selection.
-type UCB1Result struct {
-	Action            BanditAction
-	ActionProbability float64
-}
-
-// UCB1 selects an action using the Upper Confidence Bound 1 algorithm.
-func UCB1(
-	perAction map[string]BanditPerActionStats,
-	actions []BanditAction,
-) (UCB1Result, error) {
-	if len(actions) == 0 {
-		return UCB1Result{}, errEmptyActions("ucb1")
-	}
-
-	sorted := sortedActions(actions)
-
-	// Cold-start policy — sample every action at least once.
-	for _, action := range sorted {
-		stats := statsFor(perAction, action.ID)
-		if stats.Samples == 0 {
-			return UCB1Result{Action: action, ActionProbability: 1.0}, nil
-		}
-	}
-
-	totalSamples := 0
-	for _, action := range sorted {
-		totalSamples += statsFor(perAction, action.ID).Samples
-	}
-	lnTotal := math.Log(math.Max(float64(totalSamples), 1))
-
-	bestID := sorted[0].ID
-	bestScore := math.Inf(-1)
-	for _, action := range sorted {
-		stats := statsFor(perAction, action.ID)
-		score := stats.Mean + math.Sqrt(2*lnTotal/math.Max(float64(stats.Samples), 1))
-		if score > bestScore {
-			bestScore = score
-			bestID = action.ID
-		}
-	}
-
-	var bestAction BanditAction
-	for _, a := range sorted {
-		if a.ID == bestID {
-			bestAction = a
-			break
-		}
-	}
-
-	return UCB1Result{Action: bestAction, ActionProbability: 1.0}, nil
-}
-
 // BanditEvaluationResult is the output of EvaluateBandit.
 type BanditEvaluationResult struct {
+	// Action is the selected arm.
 	Action BanditAction
-	Entry  BanditDecisionEntry
+	// Entry is the structured decision record for the decision log.
+	Entry BanditDecisionEntry
 }
 
-// EvaluateBandit is the top-level entry point that selects a bandit action
-// for the given context and bandit key.
-// Returns nil when no model is available (cold start, no model loaded yet).
+// EvaluateBandit selects a bandit action for the given context and bandit key.
+//
+// Returns (nil, nil) when the store has no model for this bandit, which the
+// evaluator reports as a named skip. Returns an error when the config itself
+// cannot be served (empty action set, unknown algorithm) so the evaluator can
+// say which of the two happened instead of blaming a missing model.
 func EvaluateBandit(
 	banditKey string,
 	config BanditConfig,
 	ctx EvalContext,
 	store BanditModelStore,
-) *BanditEvaluationResult {
+) (*BanditEvaluationResult, error) {
 	model := store.GetModel(banditKey)
 	if model == nil {
-		return nil
+		return nil, nil
 	}
 
-	// Contextual lookup — when the model declares per-bucket maps and the
-	// request's bucket exists, use that. Otherwise fall back to top-level.
+	// Contextual lookup: when the model declares per-bucket maps and the
+	// request's bucket is one of them, use it. Otherwise the top-level map.
 	bucketKey := deriveContextBucket(config, ctx)
 	perActionMap := model.PerAction
 	if bucketKey != "" && model.ContextualModels != nil {
@@ -332,7 +194,11 @@ func EvaluateBandit(
 		}
 	}
 
-	hashBucket := MurmurHash3(banditKey+":"+ContextSummary(ctx), 0) % maxBucket
+	// The request bucket is seeded from the bandit key and the context's
+	// bucketing key, matching the reference exactly. It used to be seeded
+	// from a context SUMMARY string ("user:u_1"), which made every Go bandit
+	// decision differ from every other language's for the same visitor.
+	hashBucket := MurmurHash3(banditKey+":"+BucketingKey(ctx, "user"), 0) % maxBucket
 
 	var action BanditAction
 	var actionProbability float64
@@ -342,7 +208,7 @@ func EvaluateBandit(
 	case "epsilon-greedy":
 		result, err := EpsilonGreedy(perActionMap, config.Actions, hashBucket, config.ExplorationRate)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		action = result.Action
 		actionProbability = result.ActionProbability
@@ -351,14 +217,14 @@ func EvaluateBandit(
 			if config.ExplorationRate != nil {
 				epsilon = *config.ExplorationRate
 			}
-			g := epsilon
-			optimalityGap = &g
+			gap := epsilon
+			optimalityGap = &gap
 		}
 
 	case "thompson-sampling":
 		result, err := ThompsonSample(perActionMap, config.Actions, hashBucket)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		action = result.Action
 		actionProbability = result.ActionProbability
@@ -366,32 +232,37 @@ func EvaluateBandit(
 	case "ucb1":
 		result, err := UCB1(perActionMap, config.Actions)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		action = result.Action
 		actionProbability = result.ActionProbability
 
 	default:
-		return nil
+		return nil, banditError("unknown bandit algorithm " + quoteForError(config.Algorithm) +
+			". Known algorithms: epsilon-greedy, thompson-sampling, ucb1")
 	}
 
-	entry := BanditDecisionEntry{
-		FlagKey:           banditKey,
-		BanditKey:         banditKey,
-		ActionID:          action.ID,
-		ModelVersion:      model.Version,
-		ActionProbability: actionProbability,
-		OptimalityGap:     optimalityGap,
-		Source:            "bandit",
-		RuleType:          "bandit",
-		Reasons:           []string{"bandit \"" + banditKey + "\" served action \"" + action.ID + "\""},
-	}
-
-	return &BanditEvaluationResult{Action: action, Entry: entry}
+	return &BanditEvaluationResult{
+		Action: action,
+		Entry: BanditDecisionEntry{
+			FlagKey:           banditKey,
+			BanditKey:         banditKey,
+			ActionID:          action.ID,
+			ModelVersion:      model.Version,
+			ActionProbability: actionProbability,
+			OptimalityGap:     optimalityGap,
+			Source:            SourceBandit,
+			RuleType:          RuleTypeBandit,
+			Reasons: []string{
+				"bandit " + quoteForError(banditKey) + " served action " + quoteForError(action.ID),
+			},
+		},
+	}, nil
 }
 
-// deriveContextBucket computes the context-bucket key for contextual model
-// lookup. Returns an empty string when no contextAttributes are declared.
+// deriveContextBucket computes the contextual-model lookup key by joining the
+// declared contextAttributes as key=value pairs, keys sorted alphabetically.
+// Returns "" when no action declares any, meaning "no contextual lookup".
 func deriveContextBucket(config BanditConfig, ctx EvalContext) string {
 	keys := map[string]struct{}{}
 	for _, action := range config.Actions {
@@ -411,14 +282,13 @@ func deriveContextBucket(config BanditConfig, ctx EvalContext) string {
 
 	parts := make([]string, 0, len(sorted))
 	for _, key := range sorted {
-		val := resolveContextAttr(ctx, key)
-		parts = append(parts, key+"="+val)
+		parts = append(parts, key+"="+resolveContextAttr(ctx, key))
 	}
 	return strings.Join(parts, ";")
 }
 
-// resolveContextAttr resolves a dotted attribute path from the context for
-// contextual-bucket lookup.
+// resolveContextAttr resolves a dotted attribute path for contextual-bucket
+// lookup, returning "" when it cannot be resolved.
 func resolveContextAttr(ctx EvalContext, key string) string {
 	raw := ResolveDottedAttribute(ctx, key)
 	if raw == nil {
@@ -427,12 +297,17 @@ func resolveContextAttr(ctx EvalContext, key string) string {
 	return RawToString(raw)
 }
 
-// banditError is a simple error type for this package to avoid importing fmt
-// in hot-path code. Non-critical path can still use fmt.Errorf.
+// banditError keeps fmt out of the hot path.
 type banditError string
 
 func (e banditError) Error() string { return string(e) }
 
 func errEmptyActions(fn string) error {
 	return banditError(fn + ": actions list is empty")
+}
+
+// quoteForError wraps a value in double quotes for a message, without pulling
+// in fmt or strconv on this path.
+func quoteForError(s string) string {
+	return `"` + s + `"`
 }

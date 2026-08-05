@@ -50,12 +50,12 @@ func TestEvaluateAudience_EqualsOperator(t *testing.T) {
 	}
 
 	matchCtx := makeUserCtx("u1", map[string]interface{}{"plan": "pro"})
-	if !EvaluateAudience(aud, matchCtx) {
+	if !EvaluateAudience(aud, matchCtx, AudienceOptions{}) {
 		t.Error("expected plan=pro to match the audience")
 	}
 
 	missCtx := makeUserCtx("u2", map[string]interface{}{"plan": "free"})
-	if EvaluateAudience(aud, missCtx) {
+	if EvaluateAudience(aud, missCtx, AudienceOptions{}) {
 		t.Error("expected plan=free to NOT match the audience")
 	}
 }
@@ -64,7 +64,7 @@ func TestEvaluateAudience_EqualsOperator(t *testing.T) {
 // "empty audience matches everyone" invariant.
 func TestEvaluateAudience_NilAudienceMatchesEveryone(t *testing.T) {
 	ctx := makeUserCtx("u1", nil)
-	if !EvaluateAudience(nil, ctx) {
+	if !EvaluateAudience(nil, ctx, AudienceOptions{}) {
 		t.Error("nil audience should match every context")
 	}
 }
@@ -85,12 +85,12 @@ func TestEvaluateAudience_ORLogic(t *testing.T) {
 	}
 
 	proCtx := makeUserCtx("u1", map[string]interface{}{"plan": "pro"})
-	if !EvaluateAudience(aud, proCtx) {
+	if !EvaluateAudience(aud, proCtx, AudienceOptions{}) {
 		t.Error("expected plan=pro to match OR audience")
 	}
 
 	freeCtx := makeUserCtx("u2", map[string]interface{}{"plan": "free"})
-	if EvaluateAudience(aud, freeCtx) {
+	if EvaluateAudience(aud, freeCtx, AudienceOptions{}) {
 		t.Error("expected plan=free to NOT match OR audience")
 	}
 }
@@ -110,13 +110,13 @@ func TestEvaluateCondition_NumericOperators(t *testing.T) {
 
 	ctx := makeUserCtx("u1", map[string]interface{}{"age": 25})
 
-	if !EvaluateCondition(mkCond("greater_than", 18), ctx) {
+	if !EvaluateCondition(mkCond("greater_than", 18), ctx, AudienceOptions{}) {
 		t.Error("expected 25 > 18 to be true")
 	}
-	if EvaluateCondition(mkCond("greater_than", 30), ctx) {
+	if EvaluateCondition(mkCond("greater_than", 30), ctx, AudienceOptions{}) {
 		t.Error("expected 25 > 30 to be false")
 	}
-	if !EvaluateCondition(mkCond("less_than", 30), ctx) {
+	if !EvaluateCondition(mkCond("less_than", 30), ctx, AudienceOptions{}) {
 		t.Error("expected 25 < 30 to be true")
 	}
 }
@@ -133,12 +133,12 @@ func TestEvaluateCondition_InList(t *testing.T) {
 	}
 
 	usCtx := makeUserCtx("u1", map[string]interface{}{"country": "US"})
-	if !EvaluateCondition(c, usCtx) {
+	if !EvaluateCondition(c, usCtx, AudienceOptions{}) {
 		t.Error("expected 'US' to be in_list")
 	}
 
 	deCtx := makeUserCtx("u2", map[string]interface{}{"country": "DE"})
-	if EvaluateCondition(c, deCtx) {
+	if EvaluateCondition(c, deCtx, AudienceOptions{}) {
 		t.Error("expected 'DE' to NOT be in_list")
 	}
 }
@@ -153,7 +153,7 @@ func TestEvaluateCondition_BrowserTypeReturnsFalse(t *testing.T) {
 		Value:    mustRaw("Chrome"),
 	}
 	ctx := makeUserCtx("u1", nil)
-	if EvaluateCondition(c, ctx) {
+	if EvaluateCondition(c, ctx, AudienceOptions{}) {
 		t.Error("BROWSER condition should always return false server-side")
 	}
 }
@@ -167,12 +167,12 @@ func TestEvaluateAudience_ExistsOperator(t *testing.T) {
 	}
 
 	withEmail := makeUserCtx("u1", map[string]interface{}{"email": "a@b.com"})
-	if !EvaluateAudience(aud, withEmail) {
+	if !EvaluateAudience(aud, withEmail, AudienceOptions{}) {
 		t.Error("expected exists to match context with email")
 	}
 
 	withoutEmail := makeUserCtx("u2", nil)
-	if EvaluateAudience(aud, withoutEmail) {
+	if EvaluateAudience(aud, withoutEmail, AudienceOptions{}) {
 		t.Error("expected exists to NOT match context without email")
 	}
 }

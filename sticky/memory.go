@@ -1,6 +1,18 @@
 // Package sticky provides StickyBucketService implementations for the A vs B
-// Go SDK. Import this package and pass an instance via ServerOptions to
-// enable persistent variation bucketing.
+// Go SDK. Pass one via ServerOptions.StickyBucketService to keep a visitor in
+// the variation they were first bucketed into, even when traffic weights change
+// underneath them.
+//
+// The in-memory service needs no dependencies. Redis, DynamoDB, and Postgres
+// live behind build tags so the root module stays dependency free:
+//
+//	go build -tags redis ./...
+//	go build -tags dynamodb ./...
+//	go build -tags postgres ./...
+//
+// Pick a shared store for anything running more than one process. An in-memory
+// store on three replicas gives a visitor three different sticky assignments,
+// one per replica, which is worse than no sticky bucketing at all.
 package sticky
 
 import (
@@ -9,15 +21,18 @@ import (
 	"github.com/avsbhq/avsb-go/core"
 )
 
-// assignmentKey is the composite lookup key for a sticky assignment.
+// assignmentKey is the composite lookup key: one assignment per (identity,
+// flag). It deliberately does NOT include the rule id, because a lookup happens
+// before the evaluator has picked a rule; the stored record carries the rule it
+// came from.
 type assignmentKey struct {
 	bucketingID string
 	flagKey     string
-	ruleID      string
 }
 
-// InMemoryService is a thread-safe in-memory StickyBucketService suitable for
-// tests and single-instance deployments. Assignments are lost on process restart.
+// InMemoryService keeps assignments in this process's memory. Assignments are
+// lost on restart and are not shared between replicas, so it suits tests and
+// single-instance deployments.
 type InMemoryService struct {
 	mu          sync.RWMutex
 	assignments map[assignmentKey]core.StickyAssignment
@@ -30,27 +45,27 @@ func NewInMemoryService() *InMemoryService {
 	}
 }
 
-// GetAssignment implements core.StickyBucketService.
-func (s *InMemoryService) GetAssignment(bucketingID, flagKey, ruleID string) *core.StickyAssignment {
+// Lookup implements avsb.StickyBucketService.
+func (s *InMemoryService) Lookup(bucketingID, flagKey string) *core.StickyAssignment {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	k := assignmentKey{bucketingID, flagKey, ruleID}
-	a, ok := s.assignments[k]
+	a, ok := s.assignments[assignmentKey{bucketingID, flagKey}]
 	if !ok {
 		return nil
 	}
+	// A copy, so a caller cannot mutate the stored record through the pointer.
 	cp := a
 	return &cp
 }
 
-// SaveAssignment implements core.StickyBucketService.
-func (s *InMemoryService) SaveAssignment(bucketingID, flagKey, ruleID string, assignment core.StickyAssignment) {
+// Save implements avsb.StickyBucketService.
+func (s *InMemoryService) Save(bucketingID, flagKey string, assignment core.StickyAssignment) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.assignments[assignmentKey{bucketingID, flagKey, ruleID}] = assignment
+	s.assignments[assignmentKey{bucketingID, flagKey}] = assignment
 }
 
-// Len returns the total number of stored assignments. Useful in tests.
+// Len returns how many assignments are stored. Useful in tests.
 func (s *InMemoryService) Len() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
