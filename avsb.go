@@ -80,7 +80,7 @@ func NewServer(opts ServerOptions) (*Server, error) {
 	if opts.SDKKey == "" && len(opts.Bootstrap) == 0 && opts.DatafileURL == "" {
 		return nil, errors.New(
 			"avsb: ServerOptions.SDKKey is required. Copy the environment SDK key " +
-				"(it looks like \"sdk_production_xxxxxxxx\") from Settings, then Environments, " +
+				"(it looks like \"sdk_production_xxxxxxxx\") from Environments in the project sidebar, " +
 				"in the A vs B dashboard. Pass ServerOptions.Bootstrap instead to run " +
 				"offline from a datafile you already hold")
 	}

@@ -80,7 +80,7 @@ Call `Close` before the process exits, or the last batch of exposures and conver
 
 ## 3. SDK keys
 
-Copy the **environment SDK key** from the A vs B dashboard: Settings, then Environments. It looks like `sdk_production_ttqm0eaj4vth1krcb2xn`.
+Copy the **environment SDK key** from the A vs B dashboard: Environments in the project sidebar. It looks like `sdk_production_ttqm0eaj4vth1krcb2xn`.
 
 ```bash
 export AVSB_SDK_KEY=sdk_production_ttqm0eaj4vth1krcb2xn

@@ -107,7 +107,7 @@ func (s *Server) fetchDatafile(ctx context.Context) error {
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf(
 			"the datafile at %s returned 404. That means the SDK key %s has no published "+
-				"datafile: check the key in Settings, then Environments, and publish the "+
+				"datafile: check the key in Environments in the project sidebar, and publish the "+
 				"environment at least once. Reproduce with: curl -i %s",
 			s.datafileURL, DescribeSDKKey(s.opts.SDKKey), s.datafileURL)
 	}

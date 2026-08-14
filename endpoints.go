@@ -101,7 +101,7 @@ func requireSDKKey(sdkKey, fnName string) (string, error) {
 		return "", fmt.Errorf(
 			"avsb: %s was called without an SDK key. Pass the environment SDK key "+
 				"(it looks like \"sdk_production_xxxxxxxx\"), which you can copy from "+
-				"Settings, then Environments, in the A vs B dashboard", fnName)
+				"Environments in the project sidebar, in the A vs B dashboard", fnName)
 	}
 	return trimmed, nil
 }

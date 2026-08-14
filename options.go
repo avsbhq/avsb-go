@@ -9,7 +9,7 @@ import (
 
 // ServerOptions configures a Server. Only SDKKey is required.
 type ServerOptions struct {
-	// SDKKey is the environment SDK key from Settings, then Environments, in
+	// SDKKey is the environment SDK key from Environments in the project sidebar, in
 	// the A vs B dashboard. It looks like sdk_production_xxxxxxxx. Required
 	// unless Bootstrap or DatafileURL is set.
 	//
