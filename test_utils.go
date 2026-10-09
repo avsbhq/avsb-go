@@ -21,7 +21,7 @@ import (
 //	if err != nil { t.Fatal(err) }
 //	defer server.Close()
 //
-//	flag := server.GetBoolFlag(ctx, "checkout-v2", false,
+//	flag := server.GetBoolFlag(ctx, "checkout_v2", false,
 //	    avsb.WithContext(avsb.UserContext("alice", nil)))
 //	if !flag.IsEnabled() { t.Errorf("reasons: %v", flag.Reasons()) }
 //

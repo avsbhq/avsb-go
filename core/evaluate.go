@@ -197,6 +197,16 @@ func EvaluateFlag(
 			if len(rule.Variations) == 0 {
 				continue
 			}
+			// A targeted delivery rule below 100 percent is a ROLLOUT: serve
+			// the variation to that share of the audience and let everyone
+			// else fall through to the next rule, exactly as an ab_test
+			// rule's allocation does (N1-1). The gate sits after the
+			// empty-variations skip, so a rule with nothing to serve stays a
+			// silent skip.
+			if bucket, threshold, excluded := allocationGate(rule, hashValue, flagKey); excluded {
+				addReason(allocationExclusionReason, rule.ID, bucket, formatNumberLikeJS(threshold))
+				continue
+			}
 			targetVar := variationByID(flag, rule.Variations[0].VariationID)
 			addReason(
 				"rule %q matched (targeted_delivery), serving variation %q",
@@ -206,23 +216,11 @@ func EvaluateFlag(
 			return out(buildEval(targetVar, defaultValue, SourceRule, &rule.ID, &rt))
 
 		case RuleTypeABTest:
-			// Traffic allocation is a FLOAT comparison against the raw
-			// product, never a truncated or rounded integer. A 0.12345
-			// rollout puts the threshold at 1234.5: bucket 1234 is inside it,
-			// and a port that truncates the threshold to 1234 excludes that
-			// context and diverges from every other language on one bucket in
-			// ten thousand. Boundary fixtures lock this at fractional and at
-			// integer thresholds.
-			allocHash := MurmurHash3(hashValue+flagKey+"__"+rule.ID, 0) % 10000
-			if rule.TrafficAllocation != nil {
-				threshold := *rule.TrafficAllocation * 10000
-				if float64(allocHash) >= threshold {
-					addReason(
-						"rule %q excluded by traffic allocation (hash %d >= threshold %s)",
-						rule.ID, allocHash, formatNumberLikeJS(threshold),
-					)
-					continue
-				}
+			// Traffic allocation: see allocationGate for the float-threshold
+			// rule every port must copy.
+			if bucket, threshold, excluded := allocationGate(rule, hashValue, flagKey); excluded {
+				addReason(allocationExclusionReason, rule.ID, bucket, formatNumberLikeJS(threshold))
+				continue
 			}
 
 			// Assign a variation from the cumulative split.

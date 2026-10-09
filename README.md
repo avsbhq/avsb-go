@@ -55,7 +55,7 @@ func main() {
     }
 
     evalCtx := avsb.UserContext("u_123", map[string]any{"plan": "pro"})
-    flag := server.GetBoolFlag(ctx, "checkout-v2", false, avsb.WithContext(evalCtx))
+    flag := server.GetBoolFlag(ctx, "checkout_v2", false, avsb.WithContext(evalCtx))
 
     if flag.IsEnabled() {
         // serve the new checkout
@@ -134,7 +134,7 @@ evalCtx := avsb.MultiContext(
     avsb.OrgContext("acme-corp", map[string]any{"tier": "enterprise"}),
 )
 
-flag := server.GetBoolFlag(ctx, "enterprise-feature", false, avsb.WithContext(evalCtx))
+flag := server.GetBoolFlag(ctx, "enterprise_feature", false, avsb.WithContext(evalCtx))
 ```
 
 A rule with `hashAttribute: "organization.key"` then buckets by account, so every member of an account sees the same thing. A rule with `"user.key"` buckets by person. Both work from the same call.
@@ -165,7 +165,7 @@ type CheckoutConfig struct {
     TimeoutMs int `json:"timeoutMs"`
 }
 
-flag := server.GetJSONFlag(ctx, "checkout-config", []byte(`{"retries":3,"timeoutMs":250}`),
+flag := server.GetJSONFlag(ctx, "checkout_config", []byte(`{"retries":3,"timeoutMs":250}`),
     avsb.WithContext(evalCtx))
 
 var config CheckoutConfig
@@ -222,7 +222,7 @@ Truthiness follows the JavaScript rule, because the reference engine is TypeScri
 ### Per-call options
 
 ```go
-flag := server.GetBoolFlag(ctx, "checkout-v2", false,
+flag := server.GetBoolFlag(ctx, "checkout_v2", false,
     avsb.WithContext(evalCtx),      // who this evaluation is for
     avsb.WithReasons(true),         // populate flag.Reasons() for this call
     avsb.WithoutExposure(),         // do not record an impression
@@ -350,8 +350,8 @@ Failure messages name the URL, the status, and a command to reproduce:
 ```
 avsb: OnReady could not load a datafile: the datafile at
 https://cdn.avsb.cloud/sdk_production_abc123/datafile.json returned 404. That means the
-SDK key sdk_producti...c123 has no published datafile: check the key in Settings, then
-Environments, and publish the environment at least once. Reproduce with:
+SDK key sdk_producti...c123 has no published datafile: check the key in Environments in
+the project sidebar, and publish the environment at least once. Reproduce with:
 curl -i https://cdn.avsb.cloud/sdk_production_abc123/datafile.json
 ```
 
@@ -398,8 +398,8 @@ http.ListenAndServe(":8080", handler)
 
 ```go
 func checkoutHandler(w http.ResponseWriter, r *http.Request) {
-    newCheckout := server.GetBoolFlag(r.Context(), "checkout-v2", false)
-    oneClick := server.GetBoolFlag(r.Context(), "one-click-buy", false)
+    newCheckout := server.GetBoolFlag(r.Context(), "checkout_v2", false)
+    oneClick := server.GetBoolFlag(r.Context(), "one_click_buy", false)
 
     tmpl.Execute(w, map[string]any{
         "NewCheckout": newCheckout.IsEnabled(),
@@ -417,19 +417,19 @@ go-chi speaks the same `func(http.Handler) http.Handler` shape, so `r.Use(httpmw
 r.Use(ginmw.Middleware(func(c *gin.Context) avsb.EvalContext {
     return avsb.UserContext(c.GetString("userID"), nil)
 }))
-flag := server.GetBoolFlag(c.Request.Context(), "checkout-v2", false)
+flag := server.GetBoolFlag(c.Request.Context(), "checkout_v2", false)
 
 // echo
 e.Use(echomw.Middleware(func(c echo.Context) avsb.EvalContext {
     return avsb.UserContext(userIDFrom(c), nil)
 }))
-flag := server.GetBoolFlag(c.Request().Context(), "checkout-v2", false)
+flag := server.GetBoolFlag(c.Request().Context(), "checkout_v2", false)
 
 // fiber (no *http.Request, so identity rides the Ctx's user context)
 app.Use(fibermw.Middleware(func(c *fiber.Ctx) avsb.EvalContext {
     return avsb.UserContext(c.Get("X-User-ID"), nil)
 }))
-flag := server.GetBoolFlag(c.UserContext(), "checkout-v2", false)
+flag := server.GetBoolFlag(c.UserContext(), "checkout_v2", false)
 ```
 
 | Router | Import path | Module |
@@ -493,12 +493,12 @@ Use a shared store for anything running more than one process. An in-memory stor
 Force an identity, or everyone, onto a variation until it is cleared or the process restarts. Nothing is persisted and nothing is published: this is a local QA and incident tool, not a targeting rule.
 
 ```go
-server.SetOverrideForUser("checkout-v2", "u_123", "on")
-server.SetOverrideForUser("checkout-v2", "acme", "on", "organization")
-server.SetGlobalOverride("checkout-v2", "off")
+server.SetOverrideForUser("checkout_v2", "u_123", "on")
+server.SetOverrideForUser("checkout_v2", "acme", "on", "organization")
+server.SetGlobalOverride("checkout_v2", "off")
 
-server.ClearOverrideForUser("checkout-v2", "u_123")
-server.ClearGlobalOverride("checkout-v2")
+server.ClearOverrideForUser("checkout_v2", "u_123")
+server.ClearGlobalOverride("checkout_v2")
 server.ClearAllOverrides()
 ```
 
@@ -572,7 +572,7 @@ var testDatafile = []byte(`{
   "sdkKey": "sdk_test_local0000000001",
   "collectEndpoint": "https://ingest.avsb.cloud",
   "flags": [{
-    "id": "flag_checkout", "key": "checkout-v2", "type": "boolean", "enabled": true,
+    "id": "flag_checkout", "key": "checkout_v2", "type": "boolean", "enabled": true,
     "defaultVariationId": "var_off",
     "variations": [
       {"id": "var_off", "key": "off", "value": false},
@@ -595,7 +595,7 @@ func TestCheckoutFlag(t *testing.T) {
     }
     defer server.Close()
 
-    flag := server.GetBoolFlag(context.Background(), "checkout-v2", false,
+    flag := server.GetBoolFlag(context.Background(), "checkout_v2", false,
         avsb.WithContext(avsb.UserContext("alice", nil)))
 
     if !flag.IsEnabled() {
@@ -620,7 +620,7 @@ import (
 of.SetProvider(avsbof.NewProvider(server))
 client := of.NewClient("my-app")
 
-value, _ := client.BooleanValue(ctx, "checkout-v2", false, of.EvaluationContext{
+value, _ := client.BooleanValue(ctx, "checkout_v2", false, of.EvaluationContext{
     TargetingKey: "u_123",
     Attributes: map[string]any{
         "plan":              "pro",
@@ -646,7 +646,7 @@ client, _ := ld.MakeClient("sdk-key", 5*time.Second)
 defer client.Close()
 
 user := ldcontext.New("alice")
-value, _ := client.BoolVariation("checkout-v2", user, false)
+value, _ := client.BoolVariation("checkout_v2", user, false)
 ```
 
 ```go
@@ -656,7 +656,7 @@ defer server.Close()
 _ = server.OnReady(ctx)
 
 evalCtx := avsb.UserContext("alice", nil)
-value := server.GetBoolFlag(ctx, "checkout-v2", false, avsb.WithContext(evalCtx)).Value()
+value := server.GetBoolFlag(ctx, "checkout_v2", false, avsb.WithContext(evalCtx)).Value()
 ```
 
 ```go
@@ -687,13 +687,13 @@ Differences worth knowing:
 // Statsig
 statsig.Initialize("secret-key", nil)
 user := statsig.User{UserID: "alice", Custom: map[string]any{"plan": "pro"}}
-gate := statsig.CheckGate(user, "checkout-v2")
+gate := statsig.CheckGate(user, "checkout_v2")
 ```
 
 ```go
 // A vs B
 evalCtx := avsb.UserContext("alice", map[string]any{"plan": "pro"})
-gate := server.GetBoolFlag(ctx, "checkout-v2", false, avsb.WithContext(evalCtx)).IsEnabled()
+gate := server.GetBoolFlag(ctx, "checkout_v2", false, avsb.WithContext(evalCtx)).IsEnabled()
 ```
 
 ---

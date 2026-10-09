@@ -20,7 +20,7 @@ module github.com/avsbhq/avsb-go/middleware/fibermw
 go 1.22
 
 require (
-	github.com/avsbhq/avsb-go v1.0.0
+	github.com/avsbhq/avsb-go v1.0.1
 	github.com/gofiber/fiber/v2 v2.52.5
 )
 

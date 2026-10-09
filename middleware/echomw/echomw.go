@@ -13,7 +13,7 @@
 //	}))
 //
 //	e.GET("/checkout", func(c echo.Context) error {
-//	    flag := server.GetBoolFlag(c.Request().Context(), "checkout-v2", false)
+//	    flag := server.GetBoolFlag(c.Request().Context(), "checkout_v2", false)
 //	    return c.JSON(200, map[string]any{"newCheckout": flag.IsEnabled()})
 //	})
 //

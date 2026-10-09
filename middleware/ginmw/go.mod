@@ -21,7 +21,7 @@ module github.com/avsbhq/avsb-go/middleware/ginmw
 go 1.22
 
 require (
-	github.com/avsbhq/avsb-go v1.0.0
+	github.com/avsbhq/avsb-go v1.0.1
 	github.com/gin-gonic/gin v1.10.0
 )
 

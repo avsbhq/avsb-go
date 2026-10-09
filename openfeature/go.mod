@@ -20,7 +20,7 @@ module github.com/avsbhq/avsb-go/openfeature
 go 1.22
 
 require (
-	github.com/avsbhq/avsb-go v1.0.0
+	github.com/avsbhq/avsb-go v1.0.1
 	github.com/open-feature/go-sdk v1.12.0
 )
 

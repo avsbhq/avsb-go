@@ -20,7 +20,7 @@
 //	of.SetProvider(avsbof.NewProvider(server))
 //	client := of.NewClient("my-app")
 //
-//	value, _ := client.BooleanValue(ctx, "checkout-v2", false, of.EvaluationContext{
+//	value, _ := client.BooleanValue(ctx, "checkout_v2", false, of.EvaluationContext{
 //	    TargetingKey: "u_123",
 //	    Attributes: map[string]any{
 //	        "plan":             "pro",

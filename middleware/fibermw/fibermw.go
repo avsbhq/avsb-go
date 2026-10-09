@@ -13,7 +13,7 @@
 //	}))
 //
 //	app.Get("/checkout", func(c *fiber.Ctx) error {
-//	    flag := server.GetBoolFlag(c.UserContext(), "checkout-v2", false)
+//	    flag := server.GetBoolFlag(c.UserContext(), "checkout_v2", false)
 //	    return c.JSON(fiber.Map{"newCheckout": flag.IsEnabled()})
 //	})
 //

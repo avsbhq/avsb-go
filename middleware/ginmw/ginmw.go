@@ -13,7 +13,7 @@
 //	}))
 //
 //	r.GET("/checkout", func(c *gin.Context) {
-//	    flag := server.GetBoolFlag(c.Request.Context(), "checkout-v2", false)
+//	    flag := server.GetBoolFlag(c.Request.Context(), "checkout_v2", false)
 //	    // ...
 //	})
 //

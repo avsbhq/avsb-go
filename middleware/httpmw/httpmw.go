@@ -16,7 +16,7 @@
 //
 // Then, inside any handler:
 //
-//	flag := server.GetBoolFlag(r.Context(), "checkout-v2", false)
+//	flag := server.GetBoolFlag(r.Context(), "checkout_v2", false)
 //
 // There is no Server argument: the middleware does not evaluate anything, it
 // only carries identity. An earlier version took one and never used it, which

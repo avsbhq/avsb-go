@@ -20,7 +20,7 @@ module github.com/avsbhq/avsb-go/middleware/echomw
 go 1.22
 
 require (
-	github.com/avsbhq/avsb-go v1.0.0
+	github.com/avsbhq/avsb-go v1.0.1
 	github.com/labstack/echo/v4 v4.12.0
 )
 

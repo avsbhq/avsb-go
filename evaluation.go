@@ -54,7 +54,7 @@ func (s *Server) GetNumberFlag(ctx context.Context, key string, defaultValue flo
 // into your own type:
 //
 //	type Config struct{ Retries int `json:"retries"` }
-//	flag := server.GetJSONFlag(ctx, "checkout-config", []byte(`{"retries":3}`))
+//	flag := server.GetJSONFlag(ctx, "checkout_config", []byte(`{"retries":3}`))
 //	var cfg Config
 //	if err := json.Unmarshal(flag.Value(), &cfg); err != nil { /* ... */ }
 func (s *Server) GetJSONFlag(ctx context.Context, key string, defaultValue json.RawMessage, opts ...Option) Flag[json.RawMessage] {

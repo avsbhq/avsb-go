@@ -115,8 +115,10 @@ type Rule struct {
 	HashAttribute string `json:"hashAttribute"`
 	// HoldoutID links a holdout-typed rule to the holdout registry.
 	HoldoutID string `json:"holdoutId,omitempty"`
-	// TrafficAllocation is the 0-1 fraction of contexts the ab_test admits.
-	// nil means everyone. Compared as a FLOAT: see EvaluateFlag.
+	// TrafficAllocation is the 0-1 fraction of contexts the rule admits: the
+	// experiment's traffic on an ab_test rule, the rollout on a
+	// targeted_delivery rule. nil means everyone. Compared as a FLOAT: see
+	// allocationGate.
 	TrafficAllocation *float64 `json:"trafficAllocation"`
 	// Variations is the per-rule split of traffic to variations.
 	Variations []RuleVariation `json:"variations"`

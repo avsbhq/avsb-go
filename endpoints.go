@@ -214,8 +214,8 @@ type StreamEndpointResolution struct {
 
 const streamUnavailableReason = "avsb: streaming is on, but there is no stream endpoint to " +
 	"connect to: the datafile carries no \"streamEndpoint\" field and no StreamingEndpoint " +
-	"option was set. Republish the environment from the A vs B dashboard (Settings, then " +
-	"Environments) to pick up the field, or set StreamingEndpoint explicitly. Polling stays " +
+	"option was set. Republish the environment from the A vs B dashboard (Environments, in " +
+	"the project sidebar) to pick up the field, or set StreamingEndpoint explicitly. Polling stays " +
 	"on in the meantime, so flag changes still arrive, just on the polling interval instead " +
 	"of instantly."
 

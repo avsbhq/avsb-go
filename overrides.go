@@ -9,7 +9,7 @@ package avsb
 // is a local QA and incident tool, not a targeting rule.
 //
 // contextKind defaults to "user" when empty, so an org-scoped override is
-// SetOverrideForUser("checkout-v2", "acme", "on", "organization").
+// SetOverrideForUser("checkout_v2", "acme", "on", "organization").
 func (s *Server) SetOverrideForUser(flagKey, contextKey, variationKey string, contextKind ...string) {
 	kind := "user"
 	if len(contextKind) > 0 && contextKind[0] != "" {

@@ -21,7 +21,7 @@
 //	}
 //
 //	evalCtx := avsb.UserContext("u_123", map[string]any{"plan": "pro"})
-//	flag := server.GetBoolFlag(ctx, "checkout-v2", false, avsb.WithContext(evalCtx))
+//	flag := server.GetBoolFlag(ctx, "checkout_v2", false, avsb.WithContext(evalCtx))
 //	if flag.IsEnabled() {
 //	    // serve the new checkout
 //	}
