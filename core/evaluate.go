@@ -227,7 +227,13 @@ func EvaluateFlag(
 			h := MurmurHash3(hashValue+flagKey, 0) % 10000
 			cumulative := 0.0
 			for _, rv := range rule.Variations {
-				cumulative += rv.Percentage * 10000
+				// The explicit float64 conversion forces the product to round
+				// before the add. Without it the Go compiler may fuse the
+				// multiply and add into one FMA instruction (it does on arm64),
+				// which skips that rounding and lands on a boundary JavaScript
+				// never computes: 3 + 0.7988*10000 is 7991 in JS and
+				// 7990.999999999999 fused, and the reason string differs.
+				cumulative += float64(rv.Percentage * 10000)
 				if float64(h) < cumulative {
 					expVar := variationByID(flag, rv.VariationID)
 					if opts.OnExposure != nil && expVar != nil {

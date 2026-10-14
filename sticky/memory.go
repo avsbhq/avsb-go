@@ -4,11 +4,11 @@
 // underneath them.
 //
 // The in-memory service needs no dependencies. Redis, DynamoDB, and Postgres
-// live behind build tags so the root module stays dependency free:
+// live in their own modules so the root module stays dependency free:
 //
-//	go build -tags redis ./...
-//	go build -tags dynamodb ./...
-//	go build -tags postgres ./...
+//	go get github.com/avsbhq/avsb-go/sticky/redis
+//	go get github.com/avsbhq/avsb-go/sticky/dynamodb
+//	go get github.com/avsbhq/avsb-go/sticky/postgres
 //
 // Pick a shared store for anything running more than one process. An in-memory
 // store on three replicas gives a visitor three different sticky assignments,

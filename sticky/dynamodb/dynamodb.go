@@ -1,13 +1,9 @@
-//go:build dynamodb
-
-// Package sticky: DynamoDB-backed StickyBucketService.
+// Package dynamodb is the DynamoDB-backed StickyBucketService for the A vs B Go
+// SDK. It is its own module so the DynamoDB client is a dependency only of
+// the services that use it; the root SDK module stays dependency free.
 //
-// Build with: go build -tags dynamodb ./...
-//
-// Requires the AWS SDK v2 module:
-//
-//	go get github.com/aws/aws-sdk-go-v2/service/dynamodb
-package sticky
+//	go get github.com/avsbhq/avsb-go/sticky/dynamodb
+package dynamodb
 
 import (
 	"context"
@@ -15,11 +11,16 @@ import (
 	"fmt"
 	"log/slog"
 
+	avsb "github.com/avsbhq/avsb-go"
+	"github.com/avsbhq/avsb-go/core"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
-	"github.com/avsbhq/avsb-go/core"
 )
+
+// The adapter must keep satisfying the SDK interface; a signature change in the
+// root module breaks this line at compile time instead of at a customer's.
+var _ avsb.StickyBucketService = (*DynamoDBService)(nil)
 
 // DynamoDBService is a DynamoDB-backed StickyBucketService. Each assignment is
 // stored as an item in a single table with composite key (pk=bucketingID,

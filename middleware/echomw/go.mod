@@ -10,11 +10,9 @@
 // the repository. A replace directive is ignored when this module is a
 // DEPENDENCY, so a consumer still resolves the tagged github.com/avsbhq/avsb-go.
 //
-// INDIRECT REQUIREMENTS ARE NOT LISTED HERE. `go mod tidy` writes them, along
-// with go.sum, and it needs the network to do it. Run it once per module before
-// publishing:
-//
-//	go mod tidy
+// The indirect requirements and go.sum are written by `go mod tidy` and
+// committed. Rerun it after changing a requirement (scripts/check.sh --tidy
+// runs it for every module) and keep the go directive at 1.22.
 module github.com/avsbhq/avsb-go/middleware/echomw
 
 go 1.22
@@ -22,6 +20,18 @@ go 1.22
 require (
 	github.com/avsbhq/avsb-go v1.0.1
 	github.com/labstack/echo/v4 v4.12.0
+)
+
+require (
+	github.com/labstack/gommon v0.4.2 // indirect
+	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-isatty v0.0.20 // indirect
+	github.com/valyala/bytebufferpool v1.0.0 // indirect
+	github.com/valyala/fasttemplate v1.2.2 // indirect
+	golang.org/x/crypto v0.22.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
+	golang.org/x/text v0.14.0 // indirect
 )
 
 replace github.com/avsbhq/avsb-go => ../..

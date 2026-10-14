@@ -134,7 +134,7 @@ func (s *streamingClient) connectOnce(ctx context.Context) (bool, error) {
 
 	if resp.StatusCode == http.StatusUnauthorized {
 		return false, fmt.Errorf(
-			"avsb: the event stream rejected the ticket token (401). It expires in about a "+
+			"avsb: the event stream rejected the ticket token (401). It expires in about a " +
 				"minute, so this is usually a clock or a proxy stripping the query string")
 	}
 	if resp.StatusCode != http.StatusOK {

@@ -14,6 +14,14 @@
 //	go get github.com/avsbhq/avsb-go/middleware/fibermw
 //	go get github.com/avsbhq/avsb-go/openfeature
 //
+// The Redis, DynamoDB and Postgres sticky stores follow the same rule; they
+// used to be build-tagged files in this module, and `go mod tidy` (which
+// cannot ignore build tags) pulled all three clients in here:
+//
+//	go get github.com/avsbhq/avsb-go/sticky/redis
+//	go get github.com/avsbhq/avsb-go/sticky/dynamodb
+//	go get github.com/avsbhq/avsb-go/sticky/postgres
+//
 // Import paths did not change. net/http and go-chi need nothing extra: both use
 // middleware/httpmw, which stays in this module because it is stdlib only.
 module github.com/avsbhq/avsb-go

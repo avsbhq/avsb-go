@@ -1,12 +1,8 @@
-//go:build postgres
-
-// Package sticky: PostgreSQL-backed StickyBucketService.
+// Package postgres is the PostgreSQL-backed StickyBucketService for the A vs B Go
+// SDK. It is its own module so the PostgreSQL client is a dependency only of
+// the services that use it; the root SDK module stays dependency free.
 //
-// Build with: go build -tags postgres ./...
-//
-// Requires pgx v5:
-//
-//	go get github.com/jackc/pgx/v5
+//	go get github.com/avsbhq/avsb-go/sticky/postgres
 //
 // The implementation expects a table with the following schema:
 //
@@ -17,7 +13,7 @@
 //	    assigned_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 //	    PRIMARY KEY (bucketing_id, flag_key)
 //	);
-package sticky
+package postgres
 
 import (
 	"context"
@@ -25,9 +21,14 @@ import (
 	"fmt"
 	"log/slog"
 
+	avsb "github.com/avsbhq/avsb-go"
 	"github.com/avsbhq/avsb-go/core"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// The adapter must keep satisfying the SDK interface; a signature change in the
+// root module breaks this line at compile time instead of at a customer's.
+var _ avsb.StickyBucketService = (*PostgresService)(nil)
 
 // PostgresService is a PostgreSQL-backed StickyBucketService.
 type PostgresService struct {

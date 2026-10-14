@@ -9,7 +9,9 @@
 #   ./scripts/check.sh --fix    # rewrite formatting, then vet and test
 #   ./scripts/check.sh --tidy   # also run `go mod tidy` (needs the network)
 #
-# The submodules exist so the root SDK carries no dependencies, which means
+# The submodules exist so the root SDK carries no dependencies (the framework
+# glue, the OpenFeature provider and the Redis, DynamoDB and Postgres sticky
+# stores each live in their own module), which means
 # `go test ./...` from the root does NOT reach them: Go stops at a nested go.mod.
 # Each one is entered explicitly below. Adding a module here is the only step
 # needed when a new framework submodule lands.
@@ -25,7 +27,14 @@ MODULES=(
   "middleware/echomw"
   "middleware/fibermw"
   "openfeature"
+  "sticky/redis"
+  "sticky/dynamodb"
+  "sticky/postgres"
 )
+
+# The floor every module declares. A tidy run on a newer toolchain must not
+# raise it, and a dependency that needs a newer Go is pinned below that release.
+GO_FLOOR="1.22"
 
 FIX=0
 TIDY=0
@@ -46,15 +55,25 @@ for module in "${MODULES[@]}"; do
 
   if [[ "${TIDY}" -eq 1 ]]; then
     echo "--- go mod tidy"
-    go mod tidy || failed=1
+    go mod tidy -go="${GO_FLOOR}" || failed=1
+  fi
+
+  directive="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+  if [[ "${directive}" != "${GO_FLOOR}" ]]; then
+    echo "go.mod declares go ${directive}, expected ${GO_FLOOR}" >&2
+    failed=1
   fi
 
   echo "--- gofmt"
   if [[ "${FIX}" -eq 1 ]]; then
     gofmt -w .
   else
-    unformatted="$(gofmt -l .)"
-    if [[ -n "${unformatted}" ]]; then
+    # A parse error makes gofmt exit non-zero; record it instead of letting
+    # set -e abort the run before the other modules are checked.
+    if ! unformatted="$(gofmt -l . 2>&1)"; then
+      echo "${unformatted}" >&2
+      failed=1
+    elif [[ -n "${unformatted}" ]]; then
       echo "not gofmt-clean:" >&2
       echo "${unformatted}" >&2
       echo "run ./scripts/check.sh --fix" >&2
@@ -71,19 +90,17 @@ done
 
 cd "${ROOT}"
 
-# The build-tagged sticky adapters compile only with their tag, so a plain
-# `go vet ./...` never type-checks them and a signature change to
-# StickyBucketService can rot them silently. They need their own dependencies,
-# which the root module deliberately does not carry, so this is a vet-only pass
-# that reports rather than fails.
-echo ""
-echo "=== build-tagged sticky adapters (advisory) ==="
-for tag in redis dynamodb postgres; do
-  echo "--- go vet -tags ${tag} ./sticky/..."
-  if ! go vet -tags "${tag}" ./sticky/... 2>&1 | sed 's/^/    /'; then
-    echo "    (needs the ${tag} client module; add it to a scratch module to type-check)"
-  fi
-done
+# The root module promises zero dependencies. A require line means something
+# that needs a third-party package was added to it instead of to a submodule.
+if grep -q '^require' go.mod; then
+  echo "" >&2
+  echo "the root go.mod has a require block; move that code into a submodule" >&2
+  failed=1
+fi
+if [[ -f go.sum ]]; then
+  echo "the root module has a go.sum; it should have no dependencies to sum" >&2
+  failed=1
+fi
 
 echo ""
 if [[ "${failed}" -ne 0 ]]; then

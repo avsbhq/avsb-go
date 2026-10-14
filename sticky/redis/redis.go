@@ -1,13 +1,9 @@
-//go:build redis
-
-// Package sticky: Redis-backed StickyBucketService.
+// Package redis is the Redis-backed StickyBucketService for the A vs B Go
+// SDK. It is its own module so the Redis client is a dependency only of
+// the services that use it; the root SDK module stays dependency free.
 //
-// Build with: go build -tags redis ./...
-//
-// Requires the github.com/redis/go-redis/v9 module. Add it to your go.mod:
-//
-//	go get github.com/redis/go-redis/v9
-package sticky
+//	go get github.com/avsbhq/avsb-go/sticky/redis
+package redis
 
 import (
 	"context"
@@ -16,9 +12,14 @@ import (
 	"log/slog"
 	"time"
 
+	avsb "github.com/avsbhq/avsb-go"
 	"github.com/avsbhq/avsb-go/core"
 	goredis "github.com/redis/go-redis/v9"
 )
+
+// The adapter must keep satisfying the SDK interface; a signature change in the
+// root module breaks this line at compile time instead of at a customer's.
+var _ avsb.StickyBucketService = (*RedisService)(nil)
 
 // RedisService is a Redis-backed StickyBucketService. Assignment records are
 // stored as JSON hashes keyed by bucketingID. TTL defaults to 90 days.

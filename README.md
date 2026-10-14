@@ -21,6 +21,9 @@ go get github.com/avsbhq/avsb-go/middleware/ginmw
 go get github.com/avsbhq/avsb-go/middleware/echomw
 go get github.com/avsbhq/avsb-go/middleware/fibermw
 go get github.com/avsbhq/avsb-go/openfeature
+go get github.com/avsbhq/avsb-go/sticky/redis
+go get github.com/avsbhq/avsb-go/sticky/dynamodb
+go get github.com/avsbhq/avsb-go/sticky/postgres
 ```
 
 `net/http` and go-chi need nothing extra: both use `middleware/httpmw`, which ships with the SDK because it is standard library only.
@@ -476,13 +479,31 @@ type StickyBucketService interface {
 }
 ```
 
-Redis, DynamoDB, and Postgres implementations ship behind build tags so the root module stays dependency free:
+Redis, DynamoDB, and Postgres implementations ship as their own modules, so the root module stays dependency free and you only download the client for the store you use:
 
 ```bash
-go build -tags redis ./...
-go build -tags dynamodb ./...
-go build -tags postgres ./...
+go get github.com/avsbhq/avsb-go/sticky/redis
+go get github.com/avsbhq/avsb-go/sticky/dynamodb
+go get github.com/avsbhq/avsb-go/sticky/postgres
 ```
+
+```go
+import (
+    avsb "github.com/avsbhq/avsb-go"
+    stickyredis "github.com/avsbhq/avsb-go/sticky/redis"
+    goredis "github.com/redis/go-redis/v9"
+)
+
+store := stickyredis.NewRedisService(stickyredis.RedisOptions{
+    Client: goredis.NewClient(&goredis.Options{Addr: "localhost:6379"}),
+})
+server, err := avsb.NewServer(avsb.ServerOptions{
+    SDKKey:              os.Getenv("AVSB_SDK_KEY"),
+    StickyBucketService: store,
+})
+```
+
+`sticky/dynamodb` exposes `NewDynamoDBService(client, tableName, logger)` and `sticky/postgres` exposes `NewPostgresService(pool, logger)`; the Postgres file documents the table it expects. Each module supports Go 1.22 and pins its client to the newest release that still does. Require a newer client in your own `go.mod` if you want one.
 
 Use a shared store for anything running more than one process. An in-memory store on three replicas gives a visitor three different assignments, which is worse than no sticky bucketing at all.
 

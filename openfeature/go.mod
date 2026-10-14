@@ -10,11 +10,9 @@
 // the repository. A replace directive is ignored when this module is a
 // DEPENDENCY, so a consumer still resolves the tagged github.com/avsbhq/avsb-go.
 //
-// INDIRECT REQUIREMENTS ARE NOT LISTED HERE. `go mod tidy` writes them, along
-// with go.sum, and it needs the network to do it. Run it once per module before
-// publishing:
-//
-//	go mod tidy
+// The indirect requirements and go.sum are written by `go mod tidy` and
+// committed. Rerun it after changing a requirement (scripts/check.sh --tidy
+// runs it for every module) and keep the go directive at 1.22.
 module github.com/avsbhq/avsb-go/openfeature
 
 go 1.22
@@ -24,4 +22,9 @@ require (
 	github.com/open-feature/go-sdk v1.12.0
 )
 
-replace github.com/avsbhq/avsb-go => ../..
+require (
+	github.com/go-logr/logr v1.4.2 // indirect
+	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
+)
+
+replace github.com/avsbhq/avsb-go => ..

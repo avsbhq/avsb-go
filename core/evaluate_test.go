@@ -226,10 +226,10 @@ func TestEvaluateFlag_ABTest_Deterministic(t *testing.T) {
 				Overrides: nil,
 				Rules: []Rule{
 					{
-						ID:      "rule_ab_split",
-						Type:    "ab_test",
-						Enabled: true,
-						HashAttribute: "user.key",
+						ID:                "rule_ab_split",
+						Type:              "ab_test",
+						Enabled:           true,
+						HashAttribute:     "user.key",
 						TrafficAllocation: func() *float64 { v := 1.0; return &v }(),
 						Variations: []RuleVariation{
 							{VariationID: "var_control", Percentage: 0.5},

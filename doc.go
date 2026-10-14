@@ -71,8 +71,8 @@
 //
 // Pass a [StickyBucketService] to keep a visitor in the variation they were
 // first bucketed into. The in-memory implementation needs no dependencies;
-// Redis, DynamoDB, and Postgres live behind build tags in the sticky
-// sub-package.
+// Redis, DynamoDB, and Postgres live in their own modules (sticky/redis,
+// sticky/dynamodb, sticky/postgres) so their clients stay out of your build.
 //
 // # Bandits
 //

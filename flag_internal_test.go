@@ -218,7 +218,7 @@ func TestSourceSetIsPublicOnly(t *testing.T) {
 		if _, ok := decidedSources[source]; ok {
 			t.Errorf("%q is an internal or invented spelling and must never reach a caller", source)
 		}
-		if Flag[bool]{value: true, source: source}.IsEnabled() {
+		if (Flag[bool]{value: true, source: source}).IsEnabled() {
 			t.Errorf("a flag carrying the banned source %q must not report enabled", source)
 		}
 	}

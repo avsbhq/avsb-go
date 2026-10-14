@@ -13,7 +13,8 @@ import "github.com/avsbhq/avsb-go/core"
 //
 // Implementations live in the sticky sub-package
 // (github.com/avsbhq/avsb-go/sticky): in-memory by default, with Redis,
-// DynamoDB, and Postgres behind build tags.
+// DynamoDB, and Postgres in their own modules under sticky/redis,
+// sticky/dynamodb, and sticky/postgres.
 //
 // The pipeline, in order:
 //

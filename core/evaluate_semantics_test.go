@@ -160,6 +160,52 @@ func TestSplitBoundaryReasonUsesTheCumulativeFloat(t *testing.T) {
 	}
 }
 
+// TestSplitBoundaryReasonRoundsEachSliceLikeJS is the fused multiply-add
+// detector. The cumulative boundary after a 0.0003 slice and a 0.7988 slice is
+// 3 + 7988 = 7991 in JavaScript, which rounds each product before adding it. A
+// Go build that fuses the multiply and the add (the arm64 compiler does when
+// the product is not converted) skips that rounding and prints
+// 7990.999999999999, so the reason string no longer matches the reference.
+func TestSplitBoundaryReasonRoundsEachSliceLikeJS(t *testing.T) {
+	const flagKey = "boundary-split-fma"
+	const ruleID = "rule_split_fma"
+
+	df := abcFlagDatafile(flagKey, ruleID, float64Ptr(1), []RuleVariation{
+		{VariationID: "var_a", Percentage: 0.0003},
+		{VariationID: "var_b", Percentage: 0.7988},
+		{VariationID: "var_c", Percentage: 0.2009},
+	})
+
+	// Find a context that lands in the SECOND slice, so the reason carries the
+	// 7991 boundary.
+	userKey := ""
+	for i := 0; i < 100000; i++ {
+		candidate := fmt.Sprintf("split-fma-probe-%d", i)
+		h := MurmurHash3(candidate+flagKey, 0) % 10000
+		if h >= 3 && h < 7991 {
+			userKey = candidate
+			break
+		}
+	}
+	if userKey == "" {
+		t.Fatal("could not find a context inside the second slice")
+	}
+
+	result := EvaluateFlag(flagKey, json.RawMessage(`"caller-default"`),
+		makeUserCtx(userKey, nil), df, EvaluateOptions{IncludeReasons: true})
+
+	if result.VariationKey == nil || *result.VariationKey != "b" {
+		t.Fatalf("variationKey: want b, got %v (reasons %v)", result.VariationKey, result.Reasons)
+	}
+	hash := MurmurHash3(userKey+flagKey, 0) % 10000
+	wantReason := fmt.Sprintf(
+		"rule %q matched (ab_test), bucketed into variation %q (hash %d/7991)",
+		ruleID, "b", hash)
+	if len(result.Reasons) != 1 || result.Reasons[0] != wantReason {
+		t.Errorf("reason:\n  want %q\n  got  %v", wantReason, result.Reasons)
+	}
+}
+
 // TestUnsupportedRuleTypeIsNamedNotDropped covers the silent-drop ban: a rule
 // type this SDK version has never heard of must appear in the decision trail,
 // because the reason is the only clue a newer dashboard published something the
