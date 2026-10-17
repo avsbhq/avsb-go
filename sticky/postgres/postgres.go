@@ -23,6 +23,8 @@ import (
 
 	avsb "github.com/avsbhq/avsb-go"
 	"github.com/avsbhq/avsb-go/core"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,9 +32,22 @@ import (
 // root module breaks this line at compile time instead of at a customer's.
 var _ avsb.StickyBucketService = (*PostgresService)(nil)
 
+// querier is the slice of the pool this service calls. The service holds it
+// rather than the concrete pool so the behaviour tests can stand a recording
+// fake in for PostgreSQL; NewPostgresService still takes the real pool, so
+// nothing changes for a caller.
+type querier interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+}
+
+// The real pool must keep satisfying the slice above; a pgx signature change
+// breaks this line at compile time.
+var _ querier = (*pgxpool.Pool)(nil)
+
 // PostgresService is a PostgreSQL-backed StickyBucketService.
 type PostgresService struct {
-	pool   *pgxpool.Pool
+	pool   querier
 	logger *slog.Logger
 }
 

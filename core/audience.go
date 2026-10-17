@@ -125,6 +125,13 @@ func evalCustomAttribute(c *Condition, ctx EvalContext) bool {
 		return actualRaw == nil || isJSONNull(actualRaw)
 	}
 
+	// Version operators read the raw JSON too: a number converts the way
+	// JavaScript's String(n) prints it, and any other type is no match
+	// (semver.go). An SDK that predates them reaches the default branch below.
+	if isSemverOperator(c.Operator) {
+		return evalSemverOperator(c.Operator, actualRaw, c.Value)
+	}
+
 	actual := RawToString(actualRaw)
 
 	switch c.Operator {

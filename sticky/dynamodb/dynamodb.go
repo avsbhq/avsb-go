@@ -22,11 +22,24 @@ import (
 // root module breaks this line at compile time instead of at a customer's.
 var _ avsb.StickyBucketService = (*DynamoDBService)(nil)
 
+// itemAPI is the slice of the DynamoDB client this service calls. The service
+// holds it rather than the concrete client so the behaviour tests can stand a
+// recording fake in for DynamoDB; NewDynamoDBService still takes the real
+// client, so nothing changes for a caller.
+type itemAPI interface {
+	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
+}
+
+// The real client must keep satisfying the slice above; an SDK signature
+// change breaks this line at compile time.
+var _ itemAPI = (*dynamodb.Client)(nil)
+
 // DynamoDBService is a DynamoDB-backed StickyBucketService. Each assignment is
 // stored as an item in a single table with composite key (pk=bucketingID,
 // sk=flagKey).
 type DynamoDBService struct {
-	client    *dynamodb.Client
+	client    itemAPI
 	tableName string
 	logger    *slog.Logger
 }
